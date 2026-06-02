@@ -448,3 +448,74 @@ async def test_import_vobiz_phone_numbers_adds_missing_numbers_on_rerun(monkeypa
         country_code=None,
         is_default_caller_id=False,
     )
+
+
+@pytest.mark.asyncio
+async def test_sync_livekit_dispatch_rules_deletes_stale_rule_before_recreate(
+    monkeypatch,
+):
+    calls = []
+
+    async def delete_rule(request):
+        calls.append(("delete", request.sip_dispatch_rule_id))
+
+    class FakeLiveKitAPI:
+        def __init__(self, *_args, **_kwargs):
+            self.sip = SimpleNamespace(delete_sip_dispatch_rule=delete_rule)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+    async def ensure_rule(_lkapi, **kwargs):
+        calls.append(("ensure", kwargs["workflow_id"]))
+        return {
+            "sip_dispatch_rule_id": "new-rule",
+            "workflow_id": kwargs["workflow_id"],
+            "inbound_numbers": kwargs["inbound_numbers"],
+            "target_numbers": kwargs["target_numbers"],
+            "room_prefix": "spx-voice-wf-2-",
+        }
+
+    monkeypatch.setattr(vobiz_service.livekit_api, "LiveKitAPI", FakeLiveKitAPI)
+    monkeypatch.setattr(vobiz_service, "_ensure_livekit_dispatch_rule", ensure_rule)
+    monkeypatch.setattr(vobiz_service, "effective_livekit_settings", lambda: _settings())
+    monkeypatch.setattr(
+        vobiz_service,
+        "db_client",
+        SimpleNamespace(
+            get_workflow=AsyncMock(return_value=SimpleNamespace(user_id=5)),
+        ),
+    )
+
+    result = await vobiz_service._sync_livekit_dispatch_rules(
+        credentials={
+            "livekit_sip_inbound_trunk_id": "inbound-trunk",
+            "livekit_sip_dispatch_rules": {
+                "1": {"sip_dispatch_rule_id": "old-rule"}
+            },
+        },
+        phone_rows=[
+            SimpleNamespace(
+                is_active=True,
+                inbound_workflow_id=2,
+                address_normalized="+918037565232",
+            )
+        ],
+        organization_id=7,
+        telephony_configuration_id=44,
+        config_name="Vobiz LiveKit",
+    )
+
+    assert calls == [("delete", "old-rule"), ("ensure", 2)]
+    assert result == {
+        "2": {
+            "sip_dispatch_rule_id": "new-rule",
+            "workflow_id": 2,
+            "inbound_numbers": [],
+            "target_numbers": ["08037565232"],
+            "room_prefix": "spx-voice-wf-2-",
+        }
+    }

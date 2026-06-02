@@ -421,6 +421,25 @@ async def _sync_livekit_dispatch_rules(
         settings.livekit_api_key,
         settings.livekit_api_secret,
     ) as lkapi:
+        grouped_keys = {str(workflow_id) for workflow_id in grouped}
+        for key, value in stored.items():
+            if key in grouped_keys or not isinstance(value, dict):
+                continue
+            rule_id = value.get("sip_dispatch_rule_id")
+            if not rule_id:
+                continue
+            try:
+                await lkapi.sip.delete_sip_dispatch_rule(
+                    livekit_api.DeleteSIPDispatchRuleRequest(
+                        sip_dispatch_rule_id=rule_id
+                    )
+                )
+            except TwirpError as exc:
+                if exc.code != TwirpErrorCode.NOT_FOUND:
+                    logger.warning(
+                        f"[Vobiz/LiveKit] failed to delete dispatch rule {rule_id}: {exc}"
+                    )
+
         for workflow_id, numbers in grouped.items():
             key = str(workflow_id)
             existing_id = None
@@ -440,24 +459,6 @@ async def _sync_livekit_dispatch_rules(
                 name=f"{config_name} workflow {workflow_id}",
             )
             next_rules[key] = created_or_updated
-
-        for key, value in stored.items():
-            if key in next_rules or not isinstance(value, dict):
-                continue
-            rule_id = value.get("sip_dispatch_rule_id")
-            if not rule_id:
-                continue
-            try:
-                await lkapi.sip.delete_sip_dispatch_rule(
-                    livekit_api.DeleteSIPDispatchRuleRequest(
-                        sip_dispatch_rule_id=rule_id
-                    )
-                )
-            except TwirpError as exc:
-                if exc.code != TwirpErrorCode.NOT_FOUND:
-                    logger.warning(
-                        f"[Vobiz/LiveKit] failed to delete dispatch rule {rule_id}: {exc}"
-                    )
 
     return next_rules
 
