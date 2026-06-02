@@ -65,6 +65,9 @@ ENV PYTHONUNBUFFERED=1
 # Copy application code
 COPY ./api ./api
 COPY ./scripts/start_services_docker.sh ./scripts/start_services_docker.sh
+RUN sed -i 's/\r$//' ./scripts/start_services_docker.sh && \
+    chmod +x ./scripts/start_services_docker.sh && \
+    bash -n ./scripts/start_services_docker.sh
 
 # ts_validator Node deps (built in ts-deps stage with full node:22-slim image).
 # The validator runs as a short-lived subprocess from api/mcp_server/ts_bridge.py.
@@ -81,5 +84,6 @@ ENV LOG_TO_FILE=false
 # Expose the port FastAPI will run on
 EXPOSE 8000
 
-# Run the FastAPI app with uvicorn
-CMD ["./scripts/start_services_docker.sh"]
+# Run the service supervisor. Use bash explicitly so startup does not depend on
+# copied file mode behavior from the host filesystem.
+CMD ["bash", "./scripts/start_services_docker.sh"]

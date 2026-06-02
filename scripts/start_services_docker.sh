@@ -30,7 +30,7 @@ fi
 alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
 
 ###############################################################################
-### 3) Signal handling — forward TERM/INT to children for clean docker stop
+### 3) Signal handling - forward TERM/INT to children for clean docker stop
 ###############################################################################
 
 pids=()
@@ -49,7 +49,7 @@ trap shutdown TERM INT
 start() {
   local name=$1
   shift
-  echo "→ Starting $name"
+  echo "Starting $name"
   "$@" &
   pids+=($!)
   echo "  $name PID $!"
@@ -68,7 +68,7 @@ fi
 
 # Spawn FASTAPI_WORKERS independent uvicorn processes on consecutive ports
 # starting at UVICORN_BASE_PORT. nginx upstream (configured in the remote compose profile)
-# balances across them with least_conn — better than uvicorn --workers for
+# balances across them with least_conn - better than uvicorn --workers for
 # long-lived WebSocket connections, which would otherwise stick to whichever
 # worker accepted them first.
 for ((i=0; i<FASTAPI_WORKERS; i++)); do
