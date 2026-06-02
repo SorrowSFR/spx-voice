@@ -38,13 +38,17 @@ COPY ui/src ./src
 # Set build-time environment variables (needed for Next.js build)
 ENV NEXT_PUBLIC_NODE_ENV="oss"
 ENV NEXT_TELEMETRY_DISABLED="1"
+ENV NEXT_ENABLE_SENTRY_BUILD="false"
+ENV NEXT_SERVER_SOURCE_MAPS="false"
 ENV NEXT_PUBLIC_CHATWOOT_URL=""
 ENV NEXT_PUBLIC_CHATWOOT_TOKEN=""
 ENV BACKEND_URL="http://api:8000"
 
 # Build the application with standalone mode
-# Increase Node.js heap size to prevent out-of-memory errors during build
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+# Keep the build inside small VPS memory limits. Raising this can make Docker
+# builds faster on large hosts, but low-memory Coolify machines can crash when
+# Next.js is allowed to consume several GB.
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 RUN npm run build && \
     rm -rf /tmp/* /root/.npm /root/.next/cache
 

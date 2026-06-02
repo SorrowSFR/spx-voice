@@ -16,7 +16,9 @@ You need:
 - A Coolify instance with Docker available.
 - A Git repository containing SPX Voice.
 - A domain or subdomain pointed at your Coolify server.
-- At least 8 GB RAM and 4 vCPUs for a comfortable first deployment.
+- At least 4 GB RAM for a comfortable first deployment. The UI Docker build is
+  configured for low-memory servers, but 2 GB VPS instances can still struggle
+  if other services are already running.
 
 <Warning>
 Do not commit `.env`, `api/.env`, `ui/.env`, recordings, transcripts, cache
@@ -164,8 +166,14 @@ Set `APP_URL` in Coolify to your real domain, including `https://`.
 
 ### First deploy is slow
 
-This is normal. Coolify builds Python, Pipecat, Node, and Next.js images from
-source on the first deploy.
+This is normal. Coolify builds Python, Node, and Next.js images from source on
+the first deploy.
+
+If the VPS restarts or becomes unreachable while the UI build is at
+`Creating an optimized production build`, the server is running out of memory.
+Stop other workloads, add swap, or deploy on a larger VPS for the first build.
+The provided Dockerfile caps the Next.js build heap and disables optional Sentry
+source-map work by default to keep this as small as practical.
 
 ### Voice calls connect but audio fails
 
