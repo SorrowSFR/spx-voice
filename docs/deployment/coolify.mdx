@@ -60,12 +60,11 @@ If you use Coolify's generated domain feature, generate the domain for the `ui`
 service using `SERVICE_FQDN_UI_3010`. The `_3010` part is important because the
 UI container does not listen on port `80`.
 
-## 3. Set Required Environment Variables
+## 3. Set Environment Variables
 
 Set these in Coolify before the first deploy:
 
 ```env
-APP_URL=https://voice.example.com
 POSTGRES_PASSWORD=generate-a-long-random-value
 REDIS_PASSWORD=generate-a-long-random-value
 MINIO_ROOT_PASSWORD=generate-a-long-random-value
@@ -84,9 +83,10 @@ VOICE_RUNTIME=livekit
 ```
 
 Coolify may also provide a generated service URL for the UI. The compose file
-can fall back to `SERVICE_FQDN_UI_3010` or `SERVICE_URL_UI_3010`, but setting
-`APP_URL` explicitly is still recommended because it keeps public links,
-storage links, and callback URLs predictable.
+passes `SERVICE_FQDN_UI_3010` and `SERVICE_URL_UI_3010` into the API container,
+so public links, storage links, and callback URLs are derived from the UI domain
+automatically. Set `APP_URL=https://voice.example.com` only when you want to
+override Coolify's generated UI domain.
 
 ## 4. Deploy
 
@@ -179,7 +179,10 @@ open it without adding `:3010` in your browser.
 
 ### Public links point to localhost
 
-Set `APP_URL` in Coolify to your real domain, including `https://`.
+Confirm the domain is attached to the `ui` service on internal port `3010`, then
+redeploy. The API should auto-detect `SERVICE_URL_UI_3010`/`SERVICE_FQDN_UI_3010`.
+If you need to override detection, set `APP_URL` in Coolify to your real domain,
+including `https://`.
 
 ### First deploy is slow
 

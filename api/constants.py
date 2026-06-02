@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from api.enums import Environment
+from api.utils.public_url import resolve_public_url
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", Environment.LOCAL.value)
 # Absolute path to the project root directory (i.e. the directory containing
@@ -19,8 +20,10 @@ LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY")
 
 # URLs for deployment
-BACKEND_API_ENDPOINT = os.getenv("BACKEND_API_ENDPOINT", "http://localhost:8000")
-UI_APP_URL = os.getenv("UI_APP_URL", "http://localhost:3010")
+BACKEND_API_ENDPOINT = resolve_public_url(
+    "BACKEND_API_ENDPOINT", default="http://localhost:8000"
+)
+UI_APP_URL = resolve_public_url("UI_APP_URL", default="http://localhost:3010")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
@@ -70,7 +73,9 @@ ENABLE_AWS_S3 = os.getenv("ENABLE_AWS_S3", "false").lower() == "true"
 
 # MinIO Configuration
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-MINIO_PUBLIC_ENDPOINT = os.getenv("MINIO_PUBLIC_ENDPOINT")
+MINIO_PUBLIC_ENDPOINT = resolve_public_url(
+    "MINIO_PUBLIC_ENDPOINT", default="http://localhost:9000"
+)
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "voice-audio")

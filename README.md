@@ -91,7 +91,6 @@ In Coolify:
 4. Set these required environment variables:
 
 ```env
-APP_URL=https://voice.example.com
 POSTGRES_PASSWORD=generate-a-long-random-value
 REDIS_PASSWORD=generate-a-long-random-value
 MINIO_ROOT_PASSWORD=generate-a-long-random-value
@@ -99,7 +98,9 @@ OSS_JWT_SECRET=generate-a-long-random-value
 ```
 
 Coolify handles HTTPS and routing. The API, Postgres, Redis, and MinIO stay
-inside the Docker network.
+inside the Docker network. The app auto-detects the public URL from the `ui`
+service domain; set `APP_URL=https://voice.example.com` only when you want to
+override that generated domain.
 
 Detailed guide: `docs/deployment/coolify.mdx`.
 

@@ -67,14 +67,19 @@ services:
       MANAGED_ORGANIZATION_PROVIDER_ID: ${MANAGED_ORGANIZATION_PROVIDER_ID:-managed_single_org}
       OSS_JWT_SECRET: ${OSS_JWT_SECRET:-change-this-jwt-secret}
 
-      BACKEND_API_ENDPOINT: ${APP_URL:-${SERVICE_FQDN_UI_3010:-${SERVICE_URL_UI_3010:-http://localhost:3010}}}
-      UI_APP_URL: ${APP_URL:-${SERVICE_FQDN_UI_3010:-${SERVICE_URL_UI_3010:-http://localhost:3010}}}
+      APP_URL: ${APP_URL:-}
+      BACKEND_API_ENDPOINT: ${BACKEND_API_ENDPOINT:-}
+      UI_APP_URL: ${UI_APP_URL:-}
+      COOLIFY_UI_URL: ${SERVICE_URL_UI_3010:-}
+      COOLIFY_UI_FQDN: ${SERVICE_FQDN_UI_3010:-}
+      SERVICE_URL_UI_3010: ${SERVICE_URL_UI_3010:-}
+      SERVICE_FQDN_UI_3010: ${SERVICE_FQDN_UI_3010:-}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-change-this-postgres-password}@postgres:5432/${POSTGRES_DB:-spx_voice}
       REDIS_URL: redis://:${REDIS_PASSWORD:-change-this-redis-password}@redis:6379
 
       ENABLE_AWS_S3: "false"
       MINIO_ENDPOINT: minio:9000
-      MINIO_PUBLIC_ENDPOINT: ${APP_URL:-${SERVICE_FQDN_UI_3010:-${SERVICE_URL_UI_3010:-http://localhost:3010}}}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-change-this-minio-password}
       MINIO_BUCKET: ${MINIO_BUCKET:-voice-audio}
