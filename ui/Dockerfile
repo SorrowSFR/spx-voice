@@ -29,8 +29,6 @@ COPY ui/package*.json ./
 COPY ui/tsconfig.json ./
 COPY ui/next.config.ts ./
 COPY ui/components.json ./
-COPY ui/sentry.edge.config.ts ./
-COPY ui/sentry.server.config.ts ./
 COPY ui/postcss.config.mjs ./
 COPY ui/public ./public
 COPY ui/src ./src
@@ -38,7 +36,6 @@ COPY ui/src ./src
 # Set build-time environment variables (needed for Next.js build)
 ENV NEXT_PUBLIC_NODE_ENV="oss"
 ENV NEXT_TELEMETRY_DISABLED="1"
-ENV NEXT_ENABLE_SENTRY_BUILD="false"
 ENV NEXT_SERVER_SOURCE_MAPS="false"
 ENV NEXT_PUBLIC_CHATWOOT_URL=""
 ENV NEXT_PUBLIC_CHATWOOT_TOKEN=""

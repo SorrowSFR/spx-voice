@@ -215,8 +215,6 @@ services:
       ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-false}"
       POSTHOG_API_KEY: "${POSTHOG_API_KEY:-}"
       POSTHOG_HOST: "${POSTHOG_HOST:-}"
-      SENTRY_DSN: "${SENTRY_DSN:-}"
-
     ports:
       - "8000:8000"
     depends_on:
@@ -249,8 +247,6 @@ services:
       NODE_ENV: "oss"
       # Optional observability. Provide your own keys/hosts when needed.
       ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-false}"
-      SENTRY_DSN: "${SENTRY_DSN:-}"
-
       POSTHOG_KEY: "${POSTHOG_KEY:-}"
       POSTHOG_HOST: "${POSTHOG_HOST:-}"
       POSTHOG_UI_HOST: "${POSTHOG_UI_HOST:-}"

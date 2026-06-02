@@ -18,6 +18,6 @@ bun dev
 
 1. The redirection happens server side using `ui/src/stack.tsx` after the user has logged in.
 
-### Sentry and PostHog
+### PostHog
 
-1. Initialized in `ui/src/instrumentation-client.ts`
+1. Configured through `ui/src/app/api/config/posthog/route.ts`.

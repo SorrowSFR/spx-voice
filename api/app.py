@@ -1,24 +1,7 @@
-"""Set up logging before importing anything else"""
-
-# ruff: noqa: E402
-
-import sentry_sdk
-
-from api.constants import SENTRY_DSN
-from api.logging_config import ENVIRONMENT, setup_logging
+from api.logging_config import setup_logging
 
 # Set up logging and get the listener for cleanup
 setup_logging()
-
-
-if SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        send_default_pii=True,
-        environment=ENVIRONMENT,
-    )
-    print(f"Sentry initialized in environment: {ENVIRONMENT}")
-
 
 from contextlib import asynccontextmanager
 

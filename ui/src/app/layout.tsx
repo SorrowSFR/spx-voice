@@ -5,9 +5,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 
 import ChatwootWidget from "@/components/ChatwootWidget";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import AppLayout from "@/components/layout/AppLayout";
 import PostHogIdentify from "@/components/PostHogIdentify";
-import { SentryErrorBoundary } from "@/components/SentryErrorBoundary";
 import SpinLoader from "@/components/SpinLoader";
 import { Toaster } from "@/components/ui/sonner";
 import { AppConfigProvider } from "@/context/AppConfigContext";
@@ -61,7 +61,7 @@ export default function RootLayout({
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <SentryErrorBoundary>
+        <AppErrorBoundary>
           <AuthProvider>
             <AppConfigProvider>
               <Suspense fallback={<SpinLoader />}>
@@ -80,7 +80,7 @@ export default function RootLayout({
               </Suspense>
             </AppConfigProvider>
           </AuthProvider>
-        </SentryErrorBoundary>
+        </AppErrorBoundary>
       </body>
     </html>
   );

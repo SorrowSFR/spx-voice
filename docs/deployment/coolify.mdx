@@ -172,8 +172,8 @@ the first deploy.
 If the VPS restarts or becomes unreachable while the UI build is at
 `Creating an optimized production build`, the server is running out of memory.
 Stop other workloads, add swap, or deploy on a larger VPS for the first build.
-The provided Dockerfile caps the Next.js build heap and disables optional Sentry
-source-map work by default to keep this as small as practical.
+The provided Dockerfile caps the Next.js build heap and enables webpack memory
+optimizations to keep this as small as practical.
 
 ### Voice calls connect but audio fails
 
