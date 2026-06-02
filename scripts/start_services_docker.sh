@@ -62,7 +62,7 @@ start() {
 start ari_manager           python -m api.services.telephony.ari_manager
 start campaign_orchestrator python -m api.services.campaign.campaign_orchestrator
 
-if [[ "${VOICE_RUNTIME:-livekit}" == "livekit" ]]; then
+if [[ "${VOICE_RUNTIME:-livekit}" == "livekit" && "${LIVEKIT_WORKER_MANAGED_BY_API:-false}" != "true" ]]; then
   start livekit_worker python -m api.services.livekit.worker start
 fi
 
