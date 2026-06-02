@@ -514,7 +514,7 @@ async def test_sync_livekit_dispatch_rules_deletes_stale_rule_before_recreate(
         "2": {
             "sip_dispatch_rule_id": "new-rule",
             "workflow_id": 2,
-            "inbound_numbers": [],
+            "inbound_numbers": ["08037565232"],
             "target_numbers": ["08037565232"],
             "room_prefix": "spx-voice-wf-2-",
         }

@@ -454,7 +454,7 @@ async def _sync_livekit_dispatch_rules(
                 organization_id=organization_id,
                 telephony_configuration_id=telephony_configuration_id,
                 trunk_id=inbound_trunk_id,
-                inbound_numbers=[],
+                inbound_numbers=target_numbers,
                 target_numbers=target_numbers,
                 name=f"{config_name} workflow {workflow_id}",
             )
