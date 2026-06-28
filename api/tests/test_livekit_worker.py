@@ -1000,7 +1000,11 @@ def test_livekit_post_call_payload_uses_metadata_and_transcript_fallback():
     assert payload["rep_number"] == "+15555550124"
     assert payload["called_at"] == "2026-05-31T06:49:56+00:00"
     assert payload["duration"] == 129
-    assert payload["district"] == "Rangareddy"
+    # District inference relies on a deployment-provided alias table
+    # (_DISTRICT_ALIASES), which ships empty in the public fork because the
+    # original aliases were client/region-specific. With no aliases configured,
+    # district falls back to "" rather than a hardcoded region name.
+    assert payload["district"] == ""
     assert "15 kW" in payload["looking_for"]
     assert "shop" in payload["looking_for"]
     assert payload["looking for"] == payload["looking_for"]

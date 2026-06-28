@@ -692,12 +692,13 @@ def _infer_town(text: str) -> str:
 def _infer_looking_for(text: str) -> str:
     lowered = text.lower()
     parts: list[str] = []
-    if re.search(r"\b\d+\s*(?:kw|k w|kilowatt)", lowered):
-        match = re.search(r"\b\d+\s*(?:kw|k w|kilowatt)", lowered)
-        if match:
-            parts.append(match.group(0))
+    # Match against the original text so the capacity token keeps its casing
+    # (e.g. "15 kW", not "15 kw").
+    match = re.search(r"\b\d+\s*(?:kw|k w|kilowatt)", text, re.IGNORECASE)
+    if match:
+        parts.append(match.group(0))
     if "shop" in lowered:
-        parts.append("business enquiry")
+        parts.append("shop enquiry")
     if "subsid" in lowered:
         parts.append("subsidy information")
     if "registration" in lowered or "register" in lowered or "\u0c30\u0c3f\u0c1c\u0c3f\u0c38\u0c4d\u0c1f\u0c4d\u0c30" in text:
