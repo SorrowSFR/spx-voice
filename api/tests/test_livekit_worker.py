@@ -1624,3 +1624,58 @@ async def test_livekit_opening_auto_advances_single_non_end_start_transition(
     assert '"Hello."' in observed["instructions"]
     assert observed["tools"] == ["end"]
     assert agent._current_node.id == "main"
+
+
+def _realtime_config(model="gemini-3.1-flash-live-preview"):
+    return SimpleNamespace(
+        is_realtime=True,
+        realtime=SimpleNamespace(
+            provider=ServiceProviders.GOOGLE_REALTIME,
+            model=model,
+            voice="Kore",
+            language="en",
+        ),
+        llm=None,
+        stt=None,
+        tts=None,
+    )
+
+
+def test_uses_realtime_requires_realtime_section():
+    cfg = _realtime_config()
+    assert worker._uses_realtime(cfg) is True
+
+    # is_realtime flag set but no realtime section -> NOT realtime (no split brain)
+    cfg_missing = SimpleNamespace(is_realtime=True, realtime=None)
+    assert worker._uses_realtime(cfg_missing) is False
+
+    cfg_pipeline = SimpleNamespace(is_realtime=False, realtime=None)
+    assert worker._uses_realtime(cfg_pipeline) is False
+
+
+def test_runtime_configuration_reports_mode():
+    realtime_mode = worker._runtime_configuration_from_user_config(_realtime_config())
+    assert realtime_mode["mode"] == "realtime"
+
+    pipeline_cfg = SimpleNamespace(
+        is_realtime=True,
+        realtime=None,
+        llm=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4.1"),
+        stt=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4o-transcribe"),
+        tts=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4o-mini-tts"),
+    )
+    pipeline_mode = worker._runtime_configuration_from_user_config(pipeline_cfg)
+    assert pipeline_mode["mode"] == "pipeline"
+
+
+def test_supports_realtime_generate_reply_prefix_match():
+    google = ServiceProviders.GOOGLE_REALTIME.value
+    # The known unsupported preview model.
+    assert worker._supports_realtime_generate_reply(google, "gemini-3.1-flash-live-preview") is False
+    # A "3.1"-containing but unrelated name must NOT be misclassified.
+    assert worker._supports_realtime_generate_reply(google, "gemini-3.10-pro-live") is True
+    assert worker._supports_realtime_generate_reply(google, "gemini-2.5-flash-live") is True
+    # Non-google realtime providers always support it here.
+    assert worker._supports_realtime_generate_reply(
+        ServiceProviders.OPENAI_REALTIME.value, "gpt-realtime"
+    ) is True

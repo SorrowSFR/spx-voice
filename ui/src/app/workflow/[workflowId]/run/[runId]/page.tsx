@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Copy, ExternalLink, FileText, Video } from 'lucide-react';
+import { AlertTriangle, Check, Copy, ExternalLink, FileText, Radio, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import posthog from 'posthog-js';
@@ -60,6 +60,55 @@ function getTranscriptMetrics(logs: WorkflowRunLogs | null, gatheredContext: Rec
         : nodeNames.size;
 
     return { userTurns, botTurns, toolCalls, visitedNodes };
+}
+
+function getStartupError(annotations: Record<string, unknown> | null): string | null {
+    const value = annotations?.livekit_startup_error;
+    return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function getRuntimeMode(initialContext: Record<string, unknown> | null): string | null {
+    const runtime = initialContext?.runtime_configuration;
+    if (runtime && typeof runtime === 'object') {
+        const mode = (runtime as Record<string, unknown>).mode;
+        if (typeof mode === 'string' && mode.trim()) return mode;
+    }
+    return null;
+}
+
+function StartupErrorBanner({ error }: { error: string }) {
+    return (
+        <Card className="border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
+            <CardHeader className="flex flex-row items-center gap-2 pb-2">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                <CardTitle className="text-lg text-red-900 dark:text-red-100">
+                    Call failed to start
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-red-900 dark:text-red-100">
+                    The LiveKit worker could not start this run. This is usually a
+                    model/provider or runtime configuration problem.
+                </p>
+                <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-red-100 p-3 text-xs text-red-950 dark:bg-red-950/50 dark:text-red-100">
+                    {error}
+                </pre>
+            </CardContent>
+        </Card>
+    );
+}
+
+function RuntimeModeBadge({ mode }: { mode: string }) {
+    const isRealtime = mode === 'realtime';
+    return (
+        <span
+            className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground"
+            title="Voice runtime mode used for this run"
+        >
+            <Radio className="h-3 w-3" />
+            {isRealtime ? 'Realtime (speech-to-speech)' : 'Pipeline (STT → LLM → TTS)'}
+        </span>
+    );
 }
 
 function MetricCard({ label, value }: { label: string; value: string }) {
@@ -233,11 +282,17 @@ export default function WorkflowRunPage() {
                         <CardHeader className="flex flex-row items-center justify-between">
                             <div className="flex items-center gap-4">
                                 <CardTitle className="text-2xl">
-                                    {isTextChatRun ? 'Text Chat Session' : 'Agent Run Completed'}
+                                    {isTextChatRun
+                                        ? 'Text Chat Session'
+                                        : getStartupError(workflowRun?.annotations ?? null)
+                                            ? 'Agent Run Failed'
+                                            : 'Agent Run Completed'}
                                 </CardTitle>
-                                <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isTextChatRun ? 'bg-sky-500/15' : 'bg-emerald-500/20'}`}>
+                                <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isTextChatRun ? 'bg-sky-500/15' : getStartupError(workflowRun?.annotations ?? null) ? 'bg-red-500/20' : 'bg-emerald-500/20'}`}>
                                     {isTextChatRun ? (
                                         <FileText className="h-5 w-5 text-sky-500" />
+                                    ) : getStartupError(workflowRun?.annotations ?? null) ? (
+                                        <AlertTriangle className="h-5 w-5 text-red-500" />
                                     ) : (
                                         <svg className="h-5 w-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
@@ -265,6 +320,13 @@ export default function WorkflowRunPage() {
                             </div>
                         </CardHeader>
                         <CardContent>
+                            {!isTextChatRun && getRuntimeMode(workflowRun?.initial_context ?? null) && (
+                                <div className="mb-4">
+                                    <RuntimeModeBadge
+                                        mode={getRuntimeMode(workflowRun?.initial_context ?? null)!}
+                                    />
+                                </div>
+                            )}
                             <p className="text-muted-foreground mb-8">
                                 {isTextChatRun
                                     ? 'Review the conversation history, metrics, and context captured for this text session.'
@@ -329,6 +391,12 @@ export default function WorkflowRunPage() {
                             </div>
                         </CardContent>
                     </Card>
+
+                        {getStartupError(workflowRun?.annotations ?? null) && (
+                            <StartupErrorBanner
+                                error={getStartupError(workflowRun?.annotations ?? null)!}
+                            />
+                        )}
 
                         <RunMetricsSection
                             costInfo={workflowRun?.cost_info ?? null}

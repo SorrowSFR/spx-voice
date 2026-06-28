@@ -790,14 +790,28 @@ def _google_thinking_config(model: str) -> dict[str, Any] | None:
     return None
 
 
+# Realtime (speech-to-speech) Google models that do NOT support the
+# generate_reply + local-VAD turn handling and must fall back to server-side
+# VAD. Matched as a prefix so preview/version suffixes are tolerated. This
+# replaces a brittle ``"3.1" in model_name`` substring check that would also
+# misclassify unrelated names (e.g. a future ``gemini-3.10``). Add a model here
+# only when it genuinely lacks generate_reply support.
+_REALTIME_GENERATE_REPLY_UNSUPPORTED_PREFIXES = (
+    "gemini-3.1-flash-live",
+)
+
+
 def _supports_realtime_generate_reply(provider: str | None, model: str | None) -> bool:
-    model_name = (model or "").lower()
-    if provider in (
+    if provider not in (
         ServiceProviders.GOOGLE_REALTIME.value,
         ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
     ):
-        return "3.1" not in model_name
-    return True
+        return True
+    model_name = (model or "").lower()
+    return not any(
+        model_name.startswith(prefix)
+        for prefix in _REALTIME_GENERATE_REPLY_UNSUPPORTED_PREFIXES
+    )
 
 
 def _supports_realtime_tool_choice(provider: str | None) -> bool:
@@ -1673,8 +1687,21 @@ def _message_metrics_payload(item) -> dict[str, float]:
     }
 
 
+def _uses_realtime(user_config) -> bool:
+    """Single source of truth for whether the worker runs in realtime mode.
+
+    Mirrors ``_create_session``: realtime requires both the ``is_realtime`` flag
+    and a populated ``realtime`` section. Using only ``is_realtime`` elsewhere
+    produced a split-brain agent (realtime code paths over a pipeline session).
+    """
+
+    return bool(user_config.is_realtime and user_config.realtime is not None)
+
+
 def _runtime_configuration_from_user_config(user_config) -> dict[str, str]:
-    runtime_configuration: dict[str, str] = {}
+    runtime_configuration: dict[str, str] = {
+        "mode": "realtime" if _uses_realtime(user_config) else "pipeline",
+    }
     if user_config.is_realtime and user_config.realtime:
         runtime_configuration["realtime_provider"] = _provider_value(
             user_config.realtime.provider
@@ -2202,6 +2229,48 @@ async def _resolve_or_create_workflow_run(
     return workflow_id, workflow_run.id, user_id, organization_id, initial_context
 
 
+async def _record_livekit_startup_failure(
+    workflow_run_id: int,
+    exc: Exception,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    user_config=None,
+) -> None:
+    """Make a startup failure visible from the workflow run, not only logs.
+
+    Emits a ``startup_failed`` event into ``logs.livekit_events`` and records
+    ``annotations.livekit_startup_error`` so the run UI can surface why a call
+    never started. Safe to call from any startup failure path.
+    """
+
+    error_text = _safe_error_text(exc)
+    logger.exception(
+        "[LiveKit] workflow run startup failed "
+        f"run_id={workflow_run_id} provider={provider} model={model}"
+    )
+    await _append_livekit_run_event(
+        workflow_run_id,
+        {
+            "type": "startup_failed",
+            "level": "error",
+            "message": error_text,
+            "provider": provider,
+            "model": model,
+            "is_realtime": bool(getattr(user_config, "is_realtime", False)),
+        },
+    )
+    try:
+        await db_client.update_workflow_run(
+            workflow_run_id,
+            is_completed=True,
+            state=WorkflowRunState.COMPLETED.value,
+            annotations={"livekit_startup_error": error_text},
+        )
+    except Exception as persist_exc:
+        logger.warning(f"[LiveKit] failed to persist startup failure: {persist_exc}")
+
+
 async def entrypoint(ctx: JobContext) -> None:
     metadata = _metadata_from_job(ctx)
     await ctx.connect()
@@ -2238,67 +2307,94 @@ async def entrypoint(ctx: JobContext) -> None:
         gathered_context={"livekit_room": ctx.room.name},
     )
 
-    workflow_run_task = asyncio.create_task(
-        db_client.get_workflow_run(workflow_run_id, organization_id=organization_id)
-    )
-    workflow_task = asyncio.create_task(
-        db_client.get_workflow(workflow_id, organization_id=organization_id)
-    )
-    user_config_task = asyncio.create_task(db_client.get_user_configurations(user_id))
-    has_recordings_task = asyncio.create_task(
-        db_client.has_active_recordings(organization_id)
-    )
-
-    workflow_run = await workflow_run_task
-    if not workflow_run:
-        raise ValueError(f"Workflow run {workflow_run_id} not found")
-
-    workflow = await workflow_task
-    if not workflow:
-        raise ValueError(f"Workflow {workflow_id} not found")
-
-    run_definition = workflow_run.definition
-    run_configs = run_definition.workflow_configurations or {}
-    latency_profile = run_configs.get("latency_profile")
-    user_config = await user_config_task
-    user_config = resolve_effective_config(
-        user_config, run_configs.get("model_overrides")
-    )
-    runtime_configuration = _runtime_configuration_from_user_config(user_config)
-    if runtime_configuration:
-        initial_context = {
-            **initial_context,
-            "runtime_configuration": runtime_configuration,
-        }
-        await db_client.update_workflow_run(
-            workflow_run_id,
-            initial_context=initial_context,
+    # Resolve workflow/config before the call starts. A failure here (missing
+    # workflow, invalid saved config, bad workflow JSON) must still be recorded
+    # on the run instead of leaving it stuck in RUNNING with no signal.
+    user_config = None
+    realtime_provider = None
+    realtime_model = None
+    try:
+        workflow_run_task = asyncio.create_task(
+            db_client.get_workflow_run(
+                workflow_run_id, organization_id=organization_id
+            )
         )
-    workflow_graph = WorkflowGraph(
-        ReactFlowDTO.model_validate(run_definition.workflow_json)
-    )
-    embedding_settings = resolve_embedding_settings(user_config)
-    has_recordings = await has_recordings_task
-    realtime_provider = (
-        _provider_value(user_config.realtime.provider)
-        if user_config.is_realtime and user_config.realtime
-        else None
-    )
-    realtime_model = (
-        getattr(user_config.realtime, "model", None)
-        if user_config.is_realtime and user_config.realtime
-        else None
-    )
-    realtime_generate_reply_supported = _supports_realtime_generate_reply(
-        realtime_provider, realtime_model
-    )
-    realtime_tts_api_key = (
-        getattr(user_config.realtime, "api_key", None)
-        if user_config.is_realtime and user_config.realtime
-        else None
-    )
+        workflow_task = asyncio.create_task(
+            db_client.get_workflow(workflow_id, organization_id=organization_id)
+        )
+        user_config_task = asyncio.create_task(
+            db_client.get_user_configurations(user_id)
+        )
+        has_recordings_task = asyncio.create_task(
+            db_client.has_active_recordings(organization_id)
+        )
+
+        workflow_run = await workflow_run_task
+        if not workflow_run:
+            raise ValueError(f"Workflow run {workflow_run_id} not found")
+
+        workflow = await workflow_task
+        if not workflow:
+            raise ValueError(f"Workflow {workflow_id} not found")
+
+        run_definition = workflow_run.definition
+        run_configs = run_definition.workflow_configurations or {}
+        latency_profile = run_configs.get("latency_profile")
+        user_config = await user_config_task
+        user_config = resolve_effective_config(
+            user_config, run_configs.get("model_overrides")
+        )
+        uses_realtime = _uses_realtime(user_config)
+        runtime_configuration = _runtime_configuration_from_user_config(user_config)
+        if runtime_configuration:
+            initial_context = {
+                **initial_context,
+                "runtime_configuration": runtime_configuration,
+            }
+            await db_client.update_workflow_run(
+                workflow_run_id,
+                initial_context=initial_context,
+            )
+        workflow_graph = WorkflowGraph(
+            ReactFlowDTO.model_validate(run_definition.workflow_json)
+        )
+        embedding_settings = resolve_embedding_settings(user_config)
+        has_recordings = await has_recordings_task
+        realtime_provider = (
+            _provider_value(user_config.realtime.provider)
+            if user_config.is_realtime and user_config.realtime
+            else None
+        )
+        realtime_model = (
+            getattr(user_config.realtime, "model", None)
+            if user_config.is_realtime and user_config.realtime
+            else None
+        )
+        realtime_generate_reply_supported = _supports_realtime_generate_reply(
+            realtime_provider, realtime_model
+        )
+        realtime_tts_api_key = (
+            getattr(user_config.realtime, "api_key", None)
+            if user_config.is_realtime and user_config.realtime
+            else None
+        )
+    except Exception as exc:
+        await _record_livekit_startup_failure(
+            workflow_run_id,
+            exc,
+            provider=realtime_provider,
+            model=realtime_model,
+            user_config=user_config,
+        )
+        raise
 
     try:
+        if user_config.is_realtime and user_config.realtime is None:
+            raise ValueError(
+                "Realtime mode is enabled but no realtime model is configured "
+                "for this run. Configure a realtime model (e.g. Google Gemini "
+                "realtime) or turn realtime mode off."
+            )
         vad = getattr(ctx.proc, "userdata", {}).get("vad") or silero.VAD.load(
             **_silero_vad_options()
         )
@@ -2318,13 +2414,13 @@ async def entrypoint(ctx: JobContext) -> None:
             embeddings_model=embedding_settings.get("model"),
             embeddings_base_url=embedding_settings.get("base_url"),
             has_recordings=has_recordings,
-            uses_realtime=bool(user_config.is_realtime),
+            uses_realtime=uses_realtime,
             realtime_generate_reply_supported=realtime_generate_reply_supported,
             realtime_tool_choice_supported=_supports_realtime_tool_choice(
                 realtime_provider
             ),
             realtime_exact_speech_uses_tts=(
-                bool(user_config.is_realtime)
+                uses_realtime
                 and not realtime_generate_reply_supported
                 and realtime_provider == ServiceProviders.GOOGLE_REALTIME.value
                 and bool(realtime_tts_api_key)
@@ -2391,32 +2487,13 @@ async def entrypoint(ctx: JobContext) -> None:
         await session.start(agent=agent, room=ctx.room)
         await agent.start_opening()
     except Exception as exc:
-        error_text = _safe_error_text(exc)
-        logger.exception(
-            "[LiveKit] workflow run startup failed "
-            f"run_id={workflow_run_id} provider={realtime_provider} "
-            f"model={realtime_model}"
-        )
-        await _append_livekit_run_event(
+        await _record_livekit_startup_failure(
             workflow_run_id,
-            {
-                "type": "startup_failed",
-                "level": "error",
-                "message": error_text,
-                "provider": realtime_provider,
-                "model": realtime_model,
-                "is_realtime": bool(user_config.is_realtime),
-            },
+            exc,
+            provider=realtime_provider,
+            model=realtime_model,
+            user_config=user_config,
         )
-        try:
-            await db_client.update_workflow_run(
-                workflow_run_id,
-                is_completed=True,
-                state=WorkflowRunState.COMPLETED.value,
-                annotations={"livekit_startup_error": error_text},
-            )
-        except Exception as exc:
-            logger.warning(f"[LiveKit] failed to persist startup failure: {exc}")
         raise
 
 
