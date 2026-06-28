@@ -20,6 +20,11 @@ from api.services.configuration.masking import check_for_masked_keys, mask_user_
 from api.services.configuration.merge import SERVICE_FIELDS, merge_user_configurations
 from api.services.configuration.registry import REGISTRY, ServiceType
 from api.services.dograh_cloud import dograh_cloud_enabled, require_dograh_cloud
+from api.services.livekit.runtime_config import (
+    LIVEKIT_SUPPORTED_PROVIDERS,
+    is_livekit_runtime,
+    livekit_supports_provider,
+)
 from api.services.mps_service_key_client import mps_service_key_client
 
 router = APIRouter(prefix="/user")
@@ -51,27 +56,47 @@ async def get_default_configurations() -> DefaultConfigurationsResponse:
             if provider != "dograh"
         }
 
+    livekit_runtime = is_livekit_runtime()
+
+    def filter_livekit_providers(
+        service: str, items: dict[str, dict]
+    ) -> dict[str, dict]:
+        """Drop providers the LiveKit worker cannot run, so the UI only offers
+        choices that actually work. Falls back to the unfiltered set if nothing
+        is supported (should not happen) to avoid an empty dropdown."""
+        if not livekit_runtime:
+            return items
+        supported = LIVEKIT_SUPPORTED_PROVIDERS.get(service)
+        if supported is None:
+            return items
+        filtered = {
+            provider: schema
+            for provider, schema in items.items()
+            if provider in supported
+        }
+        return filtered or items
+
     configurations = {
-        "llm": filter_dograh_provider({
+        "llm": filter_livekit_providers("llm", filter_dograh_provider({
             provider: model_cls.model_json_schema()
             for provider, model_cls in REGISTRY[ServiceType.LLM].items()
-        }),
-        "tts": filter_dograh_provider({
+        })),
+        "tts": filter_livekit_providers("tts", filter_dograh_provider({
             provider: model_cls.model_json_schema()
             for provider, model_cls in REGISTRY[ServiceType.TTS].items()
-        }),
-        "stt": filter_dograh_provider({
+        })),
+        "stt": filter_livekit_providers("stt", filter_dograh_provider({
             provider: model_cls.model_json_schema()
             for provider, model_cls in REGISTRY[ServiceType.STT].items()
-        }),
+        })),
         "embeddings": {
             provider: model_cls.model_json_schema()
             for provider, model_cls in REGISTRY[ServiceType.EMBEDDINGS].items()
         },
-        "realtime": {
+        "realtime": filter_livekit_providers("realtime", {
             provider: model_cls.model_json_schema()
             for provider, model_cls in REGISTRY[ServiceType.REALTIME].items()
-        },
+        }),
         "default_providers": DEFAULT_SERVICE_PROVIDERS,
         "default_is_realtime": DEFAULT_IS_REALTIME,
     }
@@ -109,6 +134,50 @@ async def get_user_configurations(
     return masked_config
 
 
+def _provider_value(section) -> str:
+    provider = getattr(section, "provider", None)
+    if provider is None:
+        return ""
+    return getattr(provider, "value", str(provider))
+
+
+def _ensure_livekit_runtime_supported(config, incoming: dict) -> None:
+    """Reject configurations the LiveKit worker cannot run, at save time.
+
+    Only validates the section(s) the user is actually changing so that
+    incremental, tab-scoped saves of unrelated sections keep working. No-op when
+    LiveKit is not the active runtime.
+    """
+
+    if not is_livekit_runtime():
+        return
+
+    # Turning on realtime mode without a realtime model produces a split-brain
+    # config (is_realtime=True, realtime=None) that fails only at call time.
+    if incoming.get("is_realtime") and config.realtime is None:
+        raise ValueError(
+            "Realtime mode is enabled but no realtime model is configured. "
+            "Configure a realtime model (e.g. Google Gemini realtime) before "
+            "turning on realtime mode."
+        )
+
+    changed = set(incoming).intersection(SERVICE_FIELDS)
+    for service in changed:
+        section = getattr(config, service, None)
+        if section is None:
+            continue
+        provider = _provider_value(section)
+        if not livekit_supports_provider(service, provider):
+            supported = ", ".join(
+                sorted(LIVEKIT_SUPPORTED_PROVIDERS.get(service, frozenset()))
+            )
+            label = {"stt": "transcriber", "tts": "voice"}.get(service, service)
+            raise ValueError(
+                f"The LiveKit runtime cannot run the '{provider}' {label} "
+                f"provider. Supported {label} providers: {supported or 'none'}."
+            )
+
+
 @router.put("/configurations/user")
 async def update_user_configurations(
     request: UserConfigurationRequestResponseSchema,
@@ -126,6 +195,11 @@ async def update_user_configurations(
 
     try:
         check_for_masked_keys(user_configurations)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        _ensure_livekit_runtime_supported(user_configurations, incoming_dict)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

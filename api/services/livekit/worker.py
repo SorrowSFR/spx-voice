@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 import time
 import uuid
@@ -71,67 +72,41 @@ FAST_INTERRUPTION_MIN_WORDS = 2
 FALSE_INTERRUPTION_TIMEOUT_SECONDS = 1.5
 FAST_PREEMPTIVE_MAX_SPEECH_DURATION_SECONDS = 3.2
 FAST_LATENCY_PROFILE_MARKERS = ("fast", "insane", "low_latency", "ultra")
+# Generic, tenant-neutral low-latency guidance. Workflow-specific data
+# collection (e.g. lead capture) is added separately and only when that feature
+# is enabled, so this prompt must not hardcode any one deployment's fields,
+# language, or honorifics.
 FAST_RESPONSE_INSTRUCTIONS = """\nPROFESSIONAL VOICE ASSISTANT:
-You are a professional SPX Voice assistant for the configured workflow.
+You are a professional voice assistant for the configured workflow.
 
-Tone: courteous, neutral, concise, and official. Avoid honorific-heavy phrasing, casual blessings or sign-offs, slang, jokes, flirting, and filler.
+Tone: courteous, neutral, concise, and official. Avoid slang, jokes, flirting, and filler.
 
 Call flow:
 - Answer the caller's latest question first in one short sentence.
-- Then collect one missing tracking field only.
-- Required tracking fields: customer_name, district, town, looking_for, remarks.
-- Use record_lead_details when a field is learned or corrected.
-- Only save customer_name, district, and town when the caller explicitly says them in this call. Never infer from examples, phone number, office location, prior calls, or memory.
+- Follow the workflow's node instructions for what to ask or collect next.
 - Use tool results as guidance only. Do not sound like an IVR; keep replies conversational and responsive.
 
 Speech:
 - Mirror the caller's language when possible.
-- Use "saar", "madam", or "andi" sparingly and professionally.
 - Never repeat the opening identity unless asked who is speaking.
 - Do not ask for OTPs, bank details, payment details, government IDs, or other sensitive personal data unless the workflow explicitly requires it and the caller has consented.
 - Do not promise messages, links, callbacks, or third-party actions unless the workflow provides that capability.
-- Close only after a clear caller close intent and complete tracking fields."""
-LEAD_CAPTURE_INSTRUCTIONS = """\
-LEAD CAPTURE:
-- Required sheet fields from the conversation: customer_name, district, town, looking_for, remarks.
-- customer_number, rep_number, called_at, and duration are captured automatically by the system.
-- Ask for the next missing required field returned by record_lead_details; do not choose your own field order.
-- Call record_lead_details whenever any required field is known or corrected.
-- Only pass values the caller explicitly stated in this call. Do not guess district, town, or customer_name.
-- Before ending, record all required fields. If the caller refuses or does not know a field after being asked, record "not provided" for that field and note the exact refused field in remarks.
-- Do not ask for OTPs, bank details, payment details, government IDs, or other sensitive personal data unless explicitly required."""
+- Close only after a clear caller close intent."""
 POST_OPENING_STATE_INSTRUCTIONS = """\
 OPENING STATE:
 - The assistant has already spoken this opening greeting exactly once: {opening}
 - Do not repeat or paraphrase that greeting or the agent identity unless the caller
   asks who this is.
-- If the caller only says hello, hi, namaste, namaskaram, or another short
-  greeting, continue directly with a brief helpful prompt instead of greeting again."""
+- If the caller only says hello, hi, or another short greeting, continue
+  directly with a brief helpful prompt instead of greeting again."""
 EXACT_SAY_RE = re.compile(r"say exactly(?:\s+in\s+[^:]+)?:\s*(.+)", re.IGNORECASE)
-ASSISTANT_CLOSE_RE = re.compile(
-    r"(కాల్\s*(ఎండ్|ముగిస్తున్నాను|ముగిస్తాను)|"
-    r"ధన్యవాదాలు|ఉంటాను|"
-    r"dhanyavadalu|call\s+(?:end\s+ches(?:t|th)?unnanu|mugistunnanu|mugistanu)|"
-    r"goodbye|bye|ending the call|end the call)",
-    re.IGNORECASE,
+# Tenant-neutral defaults. A deployment that wants a different closing line,
+# realtime voice, or language can override these via env without code changes.
+DEFAULT_END_CALL_TEXT = os.getenv(
+    "LIVEKIT_DEFAULT_END_CALL_TEXT", "Thank you, ending the call now."
 )
-USER_CLOSE_RE = re.compile(
-    r"(థ్యాంక్యూ|థాంక్యూ|ధన్యవాదాలు|ఉంటాను|బై|చాలు|"
-    r"\u0c0f\u0c02\s+\u0c32\u0c47\u0c35\u0c41|"
-    r"\u0c0f\u0c2e\u0c40\s+\u0c32\u0c47\u0c26\u0c41|"
-    r"\u0c07\u0c02\u0c15\u0c47\u0c2e\u0c40\s+\u0c32\u0c47\u0c26\u0c41|"
-    r"thank you|thanks|bye|done|no more|no questions|nothing|that's all)",
-    re.IGNORECASE,
-)
-USER_CLOSE_INTENT_TTL_SECONDS = 45.0
-DEFAULT_END_CALL_TEXT = "Dhanyavadalu, call mugistunnanu."
-LEAD_COLLECTION_FIELDS = ("customer_name", "district", "town", "looking_for")
-LEAD_FIELD_FOLLOWUP_HINTS = {
-    "customer_name": "ask for the caller's name",
-    "district": "ask for the caller's district",
-    "town": "ask for the caller's town, village, or locality",
-    "looking_for": "ask what help they need",
-}
+DEFAULT_REALTIME_VOICE = os.getenv("LIVEKIT_DEFAULT_REALTIME_VOICE", "Kore")
+DEFAULT_REALTIME_LANGUAGE = os.getenv("LIVEKIT_DEFAULT_REALTIME_LANGUAGE", "en-US")
 _GEMINI_TTS_CACHE: dict[tuple[str, str, str, str], bytes] = {}
 _OPENING_AUDIO_INFLIGHT: dict[Path, asyncio.Task[Path]] = {}
 KNOWLEDGE_BASE_GROUNDING_INSTRUCTIONS = """\
@@ -567,36 +542,6 @@ async def _live_opening_audio_path(
             _OPENING_AUDIO_INFLIGHT.pop(path, None)
 
 
-def _is_assistant_close_text(text: str) -> bool:
-    return bool(ASSISTANT_CLOSE_RE.search(text or ""))
-
-
-def _is_false_user_close_match(text: str, match: re.Match[str]) -> bool:
-    if match.group(0) != "\u0c2c\u0c48":
-        return False
-    after = text[match.end() :]
-    return bool(
-        re.match(
-            r"\s*(\u0c39\u0c3e\u0c30\u0c4d\u0c1f\u0c4d|heart)(?=$|\s|[.,!?])",
-            after,
-            re.IGNORECASE,
-        )
-    )
-
-
-def _is_user_close_text(text: str) -> bool:
-    value = text or ""
-    match = USER_CLOSE_RE.search(value)
-    if not match:
-        return False
-    return not _is_false_user_close_match(value, match)
-
-
-def _shutdown_delay_for_text(text: str) -> float:
-    word_count = max(1, len((text or "").split()))
-    return min(6.0, max(1.5, word_count * 0.32))
-
-
 def _metadata_from_job(ctx: JobContext) -> dict[str, Any]:
     return _metadata_from_json(ctx.job.metadata, "job")
 
@@ -686,10 +631,6 @@ def _compose_system_prompt(
         system_prompt = "\n\n".join(
             part for part in (latency_instructions, system_prompt) if part
         )
-    if post_call.post_call_enabled():
-        system_prompt = "\n\n".join(
-            part for part in (system_prompt, LEAD_CAPTURE_INSTRUCTIONS) if part
-        )
     if node.document_uuids:
         system_prompt = "\n\n".join(
             part
@@ -721,60 +662,6 @@ def _knowledge_base_tool_schema(document_uuids: list[str]) -> dict[str, Any]:
     }
 
 
-def _record_lead_details_tool_schema() -> dict[str, Any]:
-    return {
-        "name": "record_lead_details",
-        "description": (
-            "Persist post-call tracking fields. Call this whenever "
-            "customer name, district, town, looking_for, or remarks are known "
-            "or corrected. Only submit values that the caller explicitly stated "
-            "in this call."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "district": {
-                    "type": "string",
-                    "description": (
-                        "Customer district explicitly stated by the caller, "
-                        "for example Rangareddy. Do not infer."
-                    ),
-                },
-                "town": {
-                    "type": "string",
-                    "description": (
-                        "Customer town, village, mandal, or locality explicitly "
-                        "stated by the caller. Do not infer."
-                    ),
-                },
-                "looking_for": {
-                    "type": "string",
-                    "description": (
-                        "What the caller wants, such as subsidy, cost, "
-                        "registration, vendor, business use, or kW size."
-                    ),
-                },
-                "customer_name": {
-                    "type": "string",
-                    "description": (
-                        "Caller's name explicitly stated by the caller. Use "
-                        "'not provided' only if the caller refused after being asked."
-                    ),
-                },
-                "remarks": {
-                    "type": "string",
-                    "description": (
-                        "Short professional note summarizing the enquiry and any "
-                        "missing/refused detail."
-                    ),
-                },
-            },
-            "required": [],
-            "additionalProperties": False,
-        },
-    }
-
-
 def _provider_value(provider: Any) -> str | None:
     if provider is None:
         return None
@@ -790,14 +677,28 @@ def _google_thinking_config(model: str) -> dict[str, Any] | None:
     return None
 
 
+# Realtime (speech-to-speech) Google models that do NOT support the
+# generate_reply + local-VAD turn handling and must fall back to server-side
+# VAD. Matched as a prefix so preview/version suffixes are tolerated. This
+# replaces a brittle ``"3.1" in model_name`` substring check that would also
+# misclassify unrelated names (e.g. a future ``gemini-3.10``). Add a model here
+# only when it genuinely lacks generate_reply support.
+_REALTIME_GENERATE_REPLY_UNSUPPORTED_PREFIXES = (
+    "gemini-3.1-flash-live",
+)
+
+
 def _supports_realtime_generate_reply(provider: str | None, model: str | None) -> bool:
-    model_name = (model or "").lower()
-    if provider in (
+    if provider not in (
         ServiceProviders.GOOGLE_REALTIME.value,
         ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
     ):
-        return "3.1" not in model_name
-    return True
+        return True
+    model_name = (model or "").lower()
+    return not any(
+        model_name.startswith(prefix)
+        for prefix in _REALTIME_GENERATE_REPLY_UNSUPPORTED_PREFIXES
+    )
 
 
 def _supports_realtime_tool_choice(provider: str | None) -> bool:
@@ -824,8 +725,8 @@ class LiveKitWorkflowAgent(Agent):
         realtime_exact_speech_uses_tts: bool = False,
         tts_api_key: str | None = None,
         opening_model: str | None = None,
-        tts_voice: str = "Leda",  # Gemini voice id, not the assistant name.
-        tts_language: str = "te-IN",  # Telugu - India
+        tts_voice: str = DEFAULT_REALTIME_VOICE,  # Gemini voice id, not assistant name.
+        tts_language: str = DEFAULT_REALTIME_LANGUAGE,
         latency_profile: str | None = None,
     ) -> None:
         self._ctx = ctx
@@ -858,10 +759,6 @@ class LiveKitWorkflowAgent(Agent):
         self._opening_prewarm_task: asyncio.Task | None = None
         self._last_user_speech_end_at: float | None = None
         self._last_final_transcript_at: float | None = None
-        self._last_final_transcript: str | None = None
-        self._last_final_transcript_seen_at: float | None = None
-        self._final_user_transcripts: list[str] = []
-        self._lead_details = post_call.extract_lead_details({})
         self._recording_state: post_call.LiveKitRecordingState | None = None
         self._recording_stop_lock = asyncio.Lock()
         start_node = workflow.nodes[workflow.start_node_id]
@@ -983,162 +880,9 @@ class LiveKitWorkflowAgent(Agent):
         tools: list[llm.Tool] = []
         if node.document_uuids:
             tools.append(self._make_knowledge_base_tool(node.document_uuids))
-        if post_call.post_call_enabled():
-            tools.append(self._make_record_lead_details_tool())
         for edge in node.out_edges:
             tools.append(self._make_transition_tool(edge))
         return tools
-
-    def _missing_lead_fields(self) -> list[str]:
-        if not post_call.post_call_enabled():
-            return []
-        return post_call.missing_lead_fields(self._lead_details)
-
-    def _remember_final_user_transcript(self, text: str) -> None:
-        cleaned = post_call.normalize_lead_value(text)
-        if not cleaned:
-            return
-        self._last_final_transcript = cleaned
-        self._last_final_transcript_seen_at = time.monotonic()
-        self._final_user_transcripts.append(cleaned)
-        del self._final_user_transcripts[:-24]
-
-    def _recent_user_requested_close(self) -> bool:
-        if not self._last_final_transcript:
-            return False
-        if not _is_user_close_text(self._last_final_transcript):
-            return False
-        if self._last_final_transcript_seen_at is None:
-            return True
-        return (
-            time.monotonic() - self._last_final_transcript_seen_at
-            <= USER_CLOSE_INTENT_TTL_SECONDS
-        )
-
-    def _lead_evidence_text(self) -> str:
-        return " ".join(self._final_user_transcripts)
-
-    def _filter_unsupported_lead_updates(
-        self,
-        updates: dict[str, Any],
-    ) -> tuple[dict[str, Any], dict[str, str]]:
-        evidence_text = self._lead_evidence_text()
-        if not evidence_text:
-            return updates, {}
-
-        allowed: dict[str, Any] = {}
-        rejected: dict[str, str] = {}
-        for field, value in updates.items():
-            if post_call.user_evidence_supports_lead_value(
-                field,
-                value,
-                evidence_text,
-            ):
-                allowed[field] = value
-            else:
-                rejected[field] = post_call.normalize_lead_value(value)
-        return allowed, rejected
-
-    def _default_remarks_for_lead(self, lead: dict[str, Any]) -> str:
-        looking_for = post_call.normalize_lead_value(lead.get("looking_for"))
-        if looking_for and not post_call.is_placeholder_lead_value(looking_for):
-            return f"Caller asked about {looking_for}."
-        return ""
-
-    def _with_runtime_lead_defaults(
-        self,
-        lead: dict[str, Any],
-    ) -> dict[str, str]:
-        normalized = {
-            field: post_call.normalize_lead_value(lead.get(field))
-            for field in post_call.LEAD_FIELDS
-        }
-        if post_call.is_missing_lead_value(
-            normalized.get("remarks"),
-            lead=normalized,
-            field="remarks",
-        ):
-            remarks = self._default_remarks_for_lead(normalized)
-            if remarks:
-                normalized["remarks"] = remarks
-        return normalized
-
-    def _next_lead_field(self) -> str | None:
-        missing = self._missing_lead_fields()
-        for field in LEAD_COLLECTION_FIELDS:
-            if field in missing:
-                return field
-        return None
-
-    def _lead_prompt_for_field(self, field: str | None) -> str:
-        if not field:
-            return ""
-        return LEAD_FIELD_FOLLOWUP_HINTS.get(field, "")
-
-    async def _persist_lead_details(self, updates: dict[str, Any]) -> dict[str, str]:
-        self._lead_details = self._with_runtime_lead_defaults(
-            post_call.merge_lead_details(self._lead_details, updates)
-        )
-        await db_client.update_workflow_run(
-            self._workflow_run_id,
-            gathered_context=post_call.lead_details_gathered_context(
-                self._lead_details
-            ),
-        )
-        return self._lead_details
-
-    def _make_record_lead_details_tool(self) -> llm.Tool:
-        async def record_lead_details_tool(
-            raw_arguments: dict[str, Any] | None = None,
-        ) -> dict[str, Any]:
-            raw_arguments = raw_arguments or {}
-            updates = {
-                field: raw_arguments.get(field)
-                for field in post_call.LEAD_FIELDS
-                if field in raw_arguments
-            }
-            updates, rejected = self._filter_unsupported_lead_updates(updates)
-            lead = await self._persist_lead_details(updates)
-            missing = post_call.missing_lead_fields(lead)
-            next_field = next(iter(rejected), None) or self._next_lead_field()
-            next_followup_hint = self._lead_prompt_for_field(next_field)
-            logger.info(
-                "[LiveKit] lead details recorded "
-                f"run_id={self._workflow_run_id} missing={missing} "
-                f"rejected={list(rejected)} next_field={next_field!r}"
-            )
-            if rejected:
-                instruction = (
-                    "Do not infer lead fields. Continue naturally, answer any "
-                    "pending scheme question first, then ask one concise follow-up "
-                    f"to collect: {', '.join(rejected)}."
-                )
-            elif next_field and next_followup_hint:
-                instruction = (
-                    "Continue naturally. If the caller's latest question is already "
-                    f"answered, {next_followup_hint}."
-                )
-            elif missing:
-                instruction = (
-                    "Continue naturally and collect one missing tracking field "
-                    "before ending the call."
-                )
-            else:
-                instruction = "All required sheet fields are saved."
-            return {
-                "status": "saved",
-                "lead_details": lead,
-                "missing_fields": missing,
-                "rejected_fields": rejected,
-                "next_missing_field": next_field,
-                "next_followup_hint": next_followup_hint,
-                "instruction": instruction,
-            }
-
-        return llm.function_tool(
-            record_lead_details_tool,
-            raw_schema=_record_lead_details_tool_schema(),
-        )
 
     def _make_knowledge_base_tool(self, document_uuids: list[str]) -> llm.Tool:
         async def retrieve_kb_tool(
@@ -1184,43 +928,6 @@ class LiveKitWorkflowAgent(Agent):
             raw_arguments: dict[str, Any] | None = None,
         ) -> dict[str, Any]:
             target_node = self._workflow.nodes[edge.target]
-            missing_lead_fields = (
-                self._missing_lead_fields() if target_node.is_end else []
-            )
-            if missing_lead_fields:
-                logger.info(
-                    "[LiveKit] blocked end transition until lead fields are saved "
-                    f"run_id={self._workflow_run_id} missing={missing_lead_fields}"
-                )
-                return {
-                    "status": "blocked",
-                    "missing_fields": missing_lead_fields,
-                    "instruction": (
-                        "Do not end the call yet. Ask one concise follow-up for "
-                        "the next missing field, then call record_lead_details. "
-                        "If the caller refuses, save that field as 'not provided' "
-                        "and include it in remarks."
-                    ),
-                }
-            if (
-                target_node.is_end
-                and post_call.post_call_enabled()
-                and not self._recent_user_requested_close()
-            ):
-                logger.info(
-                    "[LiveKit] blocked end transition without caller close intent "
-                    f"run_id={self._workflow_run_id} "
-                    f"last_user={self._last_final_transcript!r}"
-                )
-                return {
-                    "status": "blocked",
-                    "missing_fields": [],
-                    "instruction": (
-                        "Do not end the call yet. The caller has not clearly asked "
-                        "to close. Answer the current question or ask one concise "
-                        "professional follow-up."
-                    ),
-                }
             logger.info(
                 "[LiveKit] transition tool called "
                 f"run_id={self._workflow_run_id} "
@@ -1673,8 +1380,21 @@ def _message_metrics_payload(item) -> dict[str, float]:
     }
 
 
+def _uses_realtime(user_config) -> bool:
+    """Single source of truth for whether the worker runs in realtime mode.
+
+    Mirrors ``_create_session``: realtime requires both the ``is_realtime`` flag
+    and a populated ``realtime`` section. Using only ``is_realtime`` elsewhere
+    produced a split-brain agent (realtime code paths over a pipeline session).
+    """
+
+    return bool(user_config.is_realtime and user_config.realtime is not None)
+
+
 def _runtime_configuration_from_user_config(user_config) -> dict[str, str]:
-    runtime_configuration: dict[str, str] = {}
+    runtime_configuration: dict[str, str] = {
+        "mode": "realtime" if _uses_realtime(user_config) else "pipeline",
+    }
     if user_config.is_realtime and user_config.realtime:
         runtime_configuration["realtime_provider"] = _provider_value(
             user_config.realtime.provider
@@ -1811,20 +1531,10 @@ def _register_feedback_handlers(
     def _on_user_input_transcribed(ev: agents.UserInputTranscribedEvent) -> None:
         if ev.is_final:
             agent._last_final_transcript_at = ev.created_at
-            agent._remember_final_user_transcript(ev.transcript)
             logger.info(
                 "[LiveKit] user transcript "
                 f"run_id={agent._workflow_run_id} text={ev.transcript!r}"
             )
-            if _is_user_close_text(ev.transcript):
-                missing = agent._missing_lead_fields()
-                if missing:
-                    logger.info(
-                        "[LiveKit] caller close detected but lead fields are missing "
-                        f"run_id={agent._workflow_run_id} missing={missing}"
-                    )
-                else:
-                    agent._schedule_shutdown("caller requested end", delay=8.0)
         agent._emit_feedback(
             {
                 "type": "rtf-user-transcription",
@@ -1856,27 +1566,6 @@ def _register_feedback_handlers(
                 "[LiveKit] assistant latency metrics "
                 f"run_id={agent._workflow_run_id} metrics={metrics}"
             )
-        if _is_assistant_close_text(text):
-            missing = agent._missing_lead_fields()
-            if missing:
-                logger.info(
-                    "[LiveKit] assistant close detected but lead fields are missing "
-                    f"run_id={agent._workflow_run_id} missing={missing}"
-                )
-            elif (
-                post_call.post_call_enabled()
-                and not agent._recent_user_requested_close()
-            ):
-                logger.info(
-                    "[LiveKit] assistant close detected without caller close intent "
-                    f"run_id={agent._workflow_run_id} "
-                    f"last_user={agent._last_final_transcript!r}"
-                )
-            else:
-                agent._schedule_shutdown(
-                    "assistant closed conversation",
-                    delay=_shutdown_delay_for_text(text),
-                )
         agent._emit_feedback(
             {
                 "type": "rtf-bot-text",
@@ -1936,7 +1625,7 @@ async def _finalize_livekit_workflow_run(
                 f"[LiveKit] failed to load existing cost info before finalize: {exc}"
             )
 
-        completed_run = await db_client.update_workflow_run(
+        await db_client.update_workflow_run(
             workflow_run_id,
             is_completed=True,
             state=WorkflowRunState.COMPLETED.value,
@@ -1948,40 +1637,10 @@ async def _finalize_livekit_workflow_run(
         )
         try:
             await _calculate_livekit_workflow_run_cost(workflow_run_id)
-            refreshed_run = await db_client.get_workflow_run_by_id(workflow_run_id)
-            if refreshed_run is not None:
-                completed_run = refreshed_run
         except Exception as exc:
             logger.error(
                 f"Error calculating LiveKit workflow run cost for {workflow_run_id}: {exc}"
             )
-        try:
-            post_call_payload = post_call.build_post_call_payload(
-                completed_run,
-                duration_seconds=elapsed,
-                logs=getattr(completed_run, "logs", None),
-                recording_url=recording_url,
-            )
-            lead_context = post_call.lead_details_gathered_context(
-                {
-                    "district": post_call_payload.get("district"),
-                    "town": post_call_payload.get("town"),
-                    "looking_for": post_call_payload.get("looking_for"),
-                    "customer_name": post_call_payload.get("customer_name"),
-                    "remarks": post_call_payload.get("remarks"),
-                }
-            )
-            webhook_result = await post_call.send_post_call_webhook(post_call_payload)
-            await db_client.update_workflow_run(
-                workflow_run_id,
-                gathered_context=lead_context,
-                logs={
-                    "post_call_webhook": webhook_result,
-                    "post_call_payload": post_call_payload,
-                },
-            )
-        except Exception as exc:
-            logger.error(f"Failed to send LiveKit post-call webhook: {exc}")
     except Exception as exc:
         logger.error(f"Failed to finalize LiveKit workflow run: {exc}")
 
@@ -2202,6 +1861,48 @@ async def _resolve_or_create_workflow_run(
     return workflow_id, workflow_run.id, user_id, organization_id, initial_context
 
 
+async def _record_livekit_startup_failure(
+    workflow_run_id: int,
+    exc: Exception,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    user_config=None,
+) -> None:
+    """Make a startup failure visible from the workflow run, not only logs.
+
+    Emits a ``startup_failed`` event into ``logs.livekit_events`` and records
+    ``annotations.livekit_startup_error`` so the run UI can surface why a call
+    never started. Safe to call from any startup failure path.
+    """
+
+    error_text = _safe_error_text(exc)
+    logger.exception(
+        "[LiveKit] workflow run startup failed "
+        f"run_id={workflow_run_id} provider={provider} model={model}"
+    )
+    await _append_livekit_run_event(
+        workflow_run_id,
+        {
+            "type": "startup_failed",
+            "level": "error",
+            "message": error_text,
+            "provider": provider,
+            "model": model,
+            "is_realtime": bool(getattr(user_config, "is_realtime", False)),
+        },
+    )
+    try:
+        await db_client.update_workflow_run(
+            workflow_run_id,
+            is_completed=True,
+            state=WorkflowRunState.COMPLETED.value,
+            annotations={"livekit_startup_error": error_text},
+        )
+    except Exception as persist_exc:
+        logger.warning(f"[LiveKit] failed to persist startup failure: {persist_exc}")
+
+
 async def entrypoint(ctx: JobContext) -> None:
     metadata = _metadata_from_job(ctx)
     await ctx.connect()
@@ -2238,67 +1939,94 @@ async def entrypoint(ctx: JobContext) -> None:
         gathered_context={"livekit_room": ctx.room.name},
     )
 
-    workflow_run_task = asyncio.create_task(
-        db_client.get_workflow_run(workflow_run_id, organization_id=organization_id)
-    )
-    workflow_task = asyncio.create_task(
-        db_client.get_workflow(workflow_id, organization_id=organization_id)
-    )
-    user_config_task = asyncio.create_task(db_client.get_user_configurations(user_id))
-    has_recordings_task = asyncio.create_task(
-        db_client.has_active_recordings(organization_id)
-    )
-
-    workflow_run = await workflow_run_task
-    if not workflow_run:
-        raise ValueError(f"Workflow run {workflow_run_id} not found")
-
-    workflow = await workflow_task
-    if not workflow:
-        raise ValueError(f"Workflow {workflow_id} not found")
-
-    run_definition = workflow_run.definition
-    run_configs = run_definition.workflow_configurations or {}
-    latency_profile = run_configs.get("latency_profile")
-    user_config = await user_config_task
-    user_config = resolve_effective_config(
-        user_config, run_configs.get("model_overrides")
-    )
-    runtime_configuration = _runtime_configuration_from_user_config(user_config)
-    if runtime_configuration:
-        initial_context = {
-            **initial_context,
-            "runtime_configuration": runtime_configuration,
-        }
-        await db_client.update_workflow_run(
-            workflow_run_id,
-            initial_context=initial_context,
+    # Resolve workflow/config before the call starts. A failure here (missing
+    # workflow, invalid saved config, bad workflow JSON) must still be recorded
+    # on the run instead of leaving it stuck in RUNNING with no signal.
+    user_config = None
+    realtime_provider = None
+    realtime_model = None
+    try:
+        workflow_run_task = asyncio.create_task(
+            db_client.get_workflow_run(
+                workflow_run_id, organization_id=organization_id
+            )
         )
-    workflow_graph = WorkflowGraph(
-        ReactFlowDTO.model_validate(run_definition.workflow_json)
-    )
-    embedding_settings = resolve_embedding_settings(user_config)
-    has_recordings = await has_recordings_task
-    realtime_provider = (
-        _provider_value(user_config.realtime.provider)
-        if user_config.is_realtime and user_config.realtime
-        else None
-    )
-    realtime_model = (
-        getattr(user_config.realtime, "model", None)
-        if user_config.is_realtime and user_config.realtime
-        else None
-    )
-    realtime_generate_reply_supported = _supports_realtime_generate_reply(
-        realtime_provider, realtime_model
-    )
-    realtime_tts_api_key = (
-        getattr(user_config.realtime, "api_key", None)
-        if user_config.is_realtime and user_config.realtime
-        else None
-    )
+        workflow_task = asyncio.create_task(
+            db_client.get_workflow(workflow_id, organization_id=organization_id)
+        )
+        user_config_task = asyncio.create_task(
+            db_client.get_user_configurations(user_id)
+        )
+        has_recordings_task = asyncio.create_task(
+            db_client.has_active_recordings(organization_id)
+        )
+
+        workflow_run = await workflow_run_task
+        if not workflow_run:
+            raise ValueError(f"Workflow run {workflow_run_id} not found")
+
+        workflow = await workflow_task
+        if not workflow:
+            raise ValueError(f"Workflow {workflow_id} not found")
+
+        run_definition = workflow_run.definition
+        run_configs = run_definition.workflow_configurations or {}
+        latency_profile = run_configs.get("latency_profile")
+        user_config = await user_config_task
+        user_config = resolve_effective_config(
+            user_config, run_configs.get("model_overrides")
+        )
+        uses_realtime = _uses_realtime(user_config)
+        runtime_configuration = _runtime_configuration_from_user_config(user_config)
+        if runtime_configuration:
+            initial_context = {
+                **initial_context,
+                "runtime_configuration": runtime_configuration,
+            }
+            await db_client.update_workflow_run(
+                workflow_run_id,
+                initial_context=initial_context,
+            )
+        workflow_graph = WorkflowGraph(
+            ReactFlowDTO.model_validate(run_definition.workflow_json)
+        )
+        embedding_settings = resolve_embedding_settings(user_config)
+        has_recordings = await has_recordings_task
+        realtime_provider = (
+            _provider_value(user_config.realtime.provider)
+            if user_config.is_realtime and user_config.realtime
+            else None
+        )
+        realtime_model = (
+            getattr(user_config.realtime, "model", None)
+            if user_config.is_realtime and user_config.realtime
+            else None
+        )
+        realtime_generate_reply_supported = _supports_realtime_generate_reply(
+            realtime_provider, realtime_model
+        )
+        realtime_tts_api_key = (
+            getattr(user_config.realtime, "api_key", None)
+            if user_config.is_realtime and user_config.realtime
+            else None
+        )
+    except Exception as exc:
+        await _record_livekit_startup_failure(
+            workflow_run_id,
+            exc,
+            provider=realtime_provider,
+            model=realtime_model,
+            user_config=user_config,
+        )
+        raise
 
     try:
+        if user_config.is_realtime and user_config.realtime is None:
+            raise ValueError(
+                "Realtime mode is enabled but no realtime model is configured "
+                "for this run. Configure a realtime model (e.g. Google Gemini "
+                "realtime) or turn realtime mode off."
+            )
         vad = getattr(ctx.proc, "userdata", {}).get("vad") or silero.VAD.load(
             **_silero_vad_options()
         )
@@ -2318,13 +2046,13 @@ async def entrypoint(ctx: JobContext) -> None:
             embeddings_model=embedding_settings.get("model"),
             embeddings_base_url=embedding_settings.get("base_url"),
             has_recordings=has_recordings,
-            uses_realtime=bool(user_config.is_realtime),
+            uses_realtime=uses_realtime,
             realtime_generate_reply_supported=realtime_generate_reply_supported,
             realtime_tool_choice_supported=_supports_realtime_tool_choice(
                 realtime_provider
             ),
             realtime_exact_speech_uses_tts=(
-                bool(user_config.is_realtime)
+                uses_realtime
                 and not realtime_generate_reply_supported
                 and realtime_provider == ServiceProviders.GOOGLE_REALTIME.value
                 and bool(realtime_tts_api_key)
@@ -2344,13 +2072,13 @@ async def entrypoint(ctx: JobContext) -> None:
                 if user_config.is_realtime and user_config.realtime
                 else None
             )
-            or "Leda",  # Gemini voice id, not the assistant name.
+            or DEFAULT_REALTIME_VOICE,  # Gemini voice id, not the assistant name.
             tts_language=(
                 getattr(user_config.realtime, "language", None)
                 if user_config.is_realtime and user_config.realtime
                 else None
             )
-            or "te-IN",
+            or DEFAULT_REALTIME_LANGUAGE,
             latency_profile=latency_profile,
         )
         _register_feedback_handlers(session, agent)
@@ -2391,32 +2119,13 @@ async def entrypoint(ctx: JobContext) -> None:
         await session.start(agent=agent, room=ctx.room)
         await agent.start_opening()
     except Exception as exc:
-        error_text = _safe_error_text(exc)
-        logger.exception(
-            "[LiveKit] workflow run startup failed "
-            f"run_id={workflow_run_id} provider={realtime_provider} "
-            f"model={realtime_model}"
-        )
-        await _append_livekit_run_event(
+        await _record_livekit_startup_failure(
             workflow_run_id,
-            {
-                "type": "startup_failed",
-                "level": "error",
-                "message": error_text,
-                "provider": realtime_provider,
-                "model": realtime_model,
-                "is_realtime": bool(user_config.is_realtime),
-            },
+            exc,
+            provider=realtime_provider,
+            model=realtime_model,
+            user_config=user_config,
         )
-        try:
-            await db_client.update_workflow_run(
-                workflow_run_id,
-                is_completed=True,
-                state=WorkflowRunState.COMPLETED.value,
-                annotations={"livekit_startup_error": error_text},
-            )
-        except Exception as exc:
-            logger.warning(f"[LiveKit] failed to persist startup failure: {exc}")
         raise
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import secrets
 import uuid
@@ -24,6 +25,10 @@ from api.services.livekit.client import (
 from api.services.livekit.runtime_config import effective_livekit_settings
 
 VOBIZ_API_BASE_URL = "https://api.vobiz.ai/api"
+
+# Bound every Vobiz HTTP call so a hung Vobiz API surfaces as a clear timeout
+# error instead of a setup wizard that spins indefinitely.
+VOBIZ_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 VOBIZ_LIVEKIT_DERIVED_CREDENTIAL_FIELDS = {
     "livekit_sip_outbound_trunk_id",
@@ -95,7 +100,7 @@ async def ensure_vobiz_livekit_credentials(
     numbers = _clean_phone_numbers(phone_numbers or [])
     livekit_inbound_numbers = _livekit_inbound_number_aliases(numbers)
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(timeout=VOBIZ_HTTP_TIMEOUT) as session:
         if not (
             updated.get("vobiz_sip_username")
             and updated.get("vobiz_sip_password")
@@ -197,7 +202,7 @@ async def list_vobiz_account_phone_numbers(credentials: dict[str, Any]) -> list[
     endpoint = f"{VOBIZ_API_BASE_URL}/v1/Account/{auth_id}/numbers"
     headers = _vobiz_headers(auth_id, auth_token)
     try:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=VOBIZ_HTTP_TIMEOUT) as session:
             data = await _vobiz_request_json(
                 session, "GET", endpoint, headers=headers, expected_statuses=(200,)
             )
@@ -239,6 +244,72 @@ async def list_vobiz_account_phone_numbers(credentials: dict[str, Any]) -> list[
             if normalized:
                 numbers.append(normalized)
     return _dedupe(numbers)
+
+
+async def verify_vobiz_credentials(auth_id: str, auth_token: str) -> dict[str, Any]:
+    """Probe Vobiz with the given credentials before running the full setup.
+
+    Returns ``{"ok": bool, "detail": str, "number_count": int | None}``. Auth and
+    network failures are reported in ``detail`` rather than raised, so the wizard
+    can show immediate, actionable feedback on the Vobiz step.
+    """
+
+    auth_id = (auth_id or "").strip()
+    auth_token = (auth_token or "").strip()
+    if not auth_id or not auth_token:
+        return {
+            "ok": False,
+            "detail": "Vobiz account ID and auth token are required.",
+            "number_count": None,
+        }
+
+    endpoint = f"{VOBIZ_API_BASE_URL}/v1/Account/{auth_id}/numbers"
+    headers = _vobiz_headers(auth_id, auth_token)
+    try:
+        async with aiohttp.ClientSession(timeout=VOBIZ_HTTP_TIMEOUT) as session:
+            data = await _vobiz_request_json(
+                session, "GET", endpoint, headers=headers, expected_statuses=(200,)
+            )
+    except HTTPException as exc:
+        return {
+            "ok": False,
+            "detail": _vobiz_probe_error_detail(exc),
+            "number_count": None,
+        }
+
+    count = len(_vobiz_response_items(data))
+    return {
+        "ok": True,
+        "detail": f"Connected to Vobiz. {count} number(s) on the account.",
+        "number_count": count,
+    }
+
+
+def _vobiz_response_items(data: dict[str, Any]) -> list[Any]:
+    for key in ("items", "data", "objects"):
+        value = data.get(key)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _vobiz_probe_error_detail(exc: HTTPException) -> str:
+    status = getattr(exc, "status_code", None)
+    if status in (401, 403):
+        return (
+            "Vobiz rejected the account ID / auth token (HTTP "
+            f"{status}). Double-check the credentials in the Vobiz console."
+        )
+    if status == 404:
+        return (
+            "Vobiz account not found (HTTP 404). Check that the account ID is "
+            "correct."
+        )
+    detail = str(getattr(exc, "detail", exc))
+    if "Failed to reach Vobiz API" in detail:
+        return "Could not reach the Vobiz API (timeout or network error)."
+    # Truncate long upstream bodies so the message stays readable in the UI.
+    return f"Vobiz returned an error: {detail[:300]}"
 
 
 async def sync_vobiz_livekit_config(
@@ -1067,10 +1138,10 @@ async def _vobiz_request_json(
                     status_code=502,
                     detail=f"Vobiz API returned non-JSON response: {text}",
                 )
-    except aiohttp.ClientError as exc:
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to reach Vobiz API: {exc}",
+            detail=f"Failed to reach Vobiz API (timeout or network error): {exc}",
         ) from exc
 
     return _extract_response_object(body)

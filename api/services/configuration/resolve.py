@@ -104,40 +104,42 @@ def resolve_effective_config(
         return user_config.model_copy(deep=True)
 
     effective = user_config.model_copy(deep=True)
-    model_overrides = normalize_model_overrides(
-        model_overrides,
-        is_realtime=model_overrides.get("is_realtime", user_config.is_realtime),
-    )
 
-    # Handle is_realtime boolean
+    # Effective realtime mode for this resolution: an explicit override wins.
+    active_realtime = model_overrides.get("is_realtime", user_config.is_realtime)
     if "is_realtime" in model_overrides:
         effective.is_realtime = model_overrides["is_realtime"]
 
-    # Handle service sections
+    # Sections the active mode does not use. A partial override of one of these
+    # still merges onto an existing global section (so an explicit tweak is not
+    # silently dropped), but an override that would have to build a brand-new
+    # section without an API key is skipped: the active mode ignores it anyway,
+    # and constructing a keyless section would be incomplete.
+    inactive_sections = ("stt", "tts") if active_realtime else ("realtime",)
+
     for section_key, service_type in _SECTION_MAP.items():
         if section_key not in model_overrides:
             continue
 
         override = _normalize_override(model_overrides[section_key] or {})
         base = getattr(effective, section_key)
+        builds_new_section = base is None or (
+            "provider" in override and override["provider"] != base.provider
+        )
 
-        if base is None:
-            # No global config for this section — build from override
-            setattr(
-                effective,
-                section_key,
-                _build_section_from_override(service_type, override),
-            )
-        elif "provider" in override and override["provider"] != base.provider:
-            # Provider changed — must construct new typed object
+        if builds_new_section:
+            if section_key in inactive_sections and not _has_non_blank_api_key(
+                override
+            ):
+                # Incomplete inactive section with no global base to merge onto.
+                continue
             setattr(
                 effective,
                 section_key,
                 _build_section_from_override(service_type, override),
             )
         else:
-            # Same provider — merge fields onto existing config
-            merged = base.model_copy(update=override)
-            setattr(effective, section_key, merged)
+            # Same provider as the global section — merge override fields onto it.
+            setattr(effective, section_key, base.model_copy(update=override))
 
     return effective

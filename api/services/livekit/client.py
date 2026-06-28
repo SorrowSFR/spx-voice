@@ -355,7 +355,7 @@ async def create_sip_dispatch_rule(
     async with livekit_api.LiveKitAPI(
         settings.livekit_url, settings.livekit_api_key, settings.livekit_api_secret
     ) as lkapi:
-        created = await lkapi.sip.create_dispatch_rule(
+        created = await lkapi.sip.create_sip_dispatch_rule(
             livekit_api.CreateSIPDispatchRuleRequest(
                 rule=livekit_api.SIPDispatchRule(
                     dispatch_rule_individual=livekit_api.SIPDispatchRuleIndividual(

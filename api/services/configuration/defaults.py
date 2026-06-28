@@ -11,13 +11,13 @@ import os
 
 from api.schemas.user_configuration import UserConfiguration
 from api.services.configuration.registry import (
-    DeepgramSTTConfiguration,
-    ElevenlabsTTSConfiguration,
     GoogleEmbeddingsConfiguration,
     GoogleLLMService,
     GoogleRealtimeLLMConfiguration,
     OpenAIEmbeddingsConfiguration,
     OpenAILLMService,
+    OpenAISTTConfiguration,
+    OpenAITTSService,
     ServiceProviders,
 )
 
@@ -41,10 +41,16 @@ GOOGLE_API_KEY_ENV_NAMES = (
 
 # Mapping of service to (provider enum, configuration class). The UI reads this
 # to decide which provider to preselect before the user has saved a config.
+#
+# The pipeline (non-realtime) STT/TTS defaults are OpenAI because that is the
+# only pipeline STT/TTS provider the LiveKit worker can actually run (see
+# api/services/livekit/runtime_config.LIVEKIT_SUPPORTED_PROVIDERS). Deepgram /
+# ElevenLabs are registered but unsupported by the worker, so defaulting to them
+# produced calls that silently failed at session creation.
 _DEFAULTS = {
     "llm": (ServiceProviders.GOOGLE, GoogleLLMService),
-    "tts": (ServiceProviders.ELEVENLABS, ElevenlabsTTSConfiguration),
-    "stt": (ServiceProviders.DEEPGRAM, DeepgramSTTConfiguration),
+    "tts": (ServiceProviders.OPENAI, OpenAITTSService),
+    "stt": (ServiceProviders.OPENAI, OpenAISTTConfiguration),
     "embeddings": (ServiceProviders.GOOGLE, GoogleEmbeddingsConfiguration),
     "realtime": (ServiceProviders.GOOGLE_REALTIME, GoogleRealtimeLLMConfiguration),
 }
@@ -68,9 +74,11 @@ def _first_env_value(names: tuple[str, ...]) -> str | None:
 def build_env_default_user_configuration() -> UserConfiguration | None:
     """Build a first-run config from deployment env vars, if available.
 
-    Gemini realtime is preferred. If no Gemini key exists, fall back to a
-    complete traditional OpenAI + Deepgram + ElevenLabs setup when all three
-    keys are present.
+    Gemini realtime is preferred. If no Gemini key exists, fall back to an
+    all-OpenAI pipeline (LLM + STT + TTS) when an OpenAI key is present. OpenAI
+    is the only pipeline STT/TTS provider the LiveKit worker can run, so the
+    fallback deliberately does not use Deepgram/ElevenLabs (which would build a
+    config that fails silently at call time).
     """
 
     google_key = _first_env_value(GOOGLE_API_KEY_ENV_NAMES)
@@ -97,9 +105,7 @@ def build_env_default_user_configuration() -> UserConfiguration | None:
         )
 
     openai_key = _first_env_value(("OPENAI_API_KEY",))
-    deepgram_key = _first_env_value(("DEEPGRAM_API_KEY",))
-    elevenlabs_key = _first_env_value(("ELEVENLABS_API_KEY", "ELEVEN_API_KEY"))
-    if openai_key and deepgram_key and elevenlabs_key:
+    if openai_key:
         return UserConfiguration(
             is_realtime=False,
             llm=OpenAILLMService(
@@ -107,16 +113,16 @@ def build_env_default_user_configuration() -> UserConfiguration | None:
                 api_key=[openai_key],
                 model="gpt-4.1",
             ),
-            stt=DeepgramSTTConfiguration(
-                provider=ServiceProviders.DEEPGRAM,
-                api_key=[deepgram_key],
-                model="nova-3-general",
+            stt=OpenAISTTConfiguration(
+                provider=ServiceProviders.OPENAI,
+                api_key=[openai_key],
+                model="gpt-4o-transcribe",
             ),
-            tts=ElevenlabsTTSConfiguration(
-                provider=ServiceProviders.ELEVENLABS,
-                api_key=[elevenlabs_key],
-                model="eleven_flash_v2_5",
-                voice="21m00Tcm4TlvDq8ikWAM",
+            tts=OpenAITTSService(
+                provider=ServiceProviders.OPENAI,
+                api_key=[openai_key],
+                model="gpt-4o-mini-tts",
+                voice="alloy",
             ),
             embeddings=OpenAIEmbeddingsConfiguration(
                 provider=ServiceProviders.OPENAI,

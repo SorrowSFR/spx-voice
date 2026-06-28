@@ -1,18 +1,22 @@
 "use client";
 
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Loader2,
   PhoneCall,
+  PlugZap,
   RadioTower,
   Route,
   WandSparkles,
+  XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { client } from "@/client/client.gen";
 import {
   getLivekitSettingsApiV1LivekitSettingsGet,
   getWorkflowsSummaryApiV1WorkflowSummaryGet,
@@ -141,6 +145,12 @@ export function VobizLiveKitSetupWizard({
   const [secretConfigured, setSecretConfigured] = useState(false);
   const [workflows, setWorkflows] = useState<WorkflowSummaryResponse[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(
+    null,
+  );
+  const [result, setResult] = useState<VobizLiveKitSetupResponse | null>(null);
+  const [resultError, setResultError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (authLoading || !user) return;
@@ -207,6 +217,9 @@ export function VobizLiveKitSetupWizard({
   useEffect(() => {
     if (open) {
       setStep(0);
+      setResult(null);
+      setResultError(null);
+      setTestResult(null);
       void load();
     }
   }, [open, load]);
@@ -217,7 +230,46 @@ export function VobizLiveKitSetupWizard({
   );
 
   const update = (key: keyof FormState, value: string | boolean) => {
+    if (key === "vobizAuthId" || key === "vobizAuthToken") {
+      setTestResult(null);
+    }
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const testVobiz = async () => {
+    if (!form.vobizAuthId.trim() || !form.vobizAuthToken.trim()) {
+      setTestResult({
+        ok: false,
+        detail: "Enter the Vobiz account ID and auth token first.",
+      });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const token = await getAccessToken();
+      const res = await client.post({
+        url: "/api/v1/livekit/vobiz/test-connection",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: {
+          vobiz_auth_id: form.vobizAuthId.trim(),
+          vobiz_auth_token: form.vobizAuthToken.trim(),
+        },
+      });
+      if (res.error) throw new Error(detailFromError(res.error));
+      const data = res.data as { ok: boolean; detail: string };
+      setTestResult({ ok: Boolean(data?.ok), detail: data?.detail ?? "" });
+    } catch (error) {
+      setTestResult({
+        ok: false,
+        detail: error instanceof Error ? error.message : "Connection test failed",
+      });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const validateStep = (targetStep = step): string | null => {
@@ -259,6 +311,8 @@ export function VobizLiveKitSetupWizard({
     }
 
     setSaving(true);
+    setResult(null);
+    setResultError(null);
     try {
       const token = await getAccessToken();
       const response = await setupVobizLivekitApiV1LivekitVobizSetupPost({
@@ -286,23 +340,24 @@ export function VobizLiveKitSetupWizard({
         },
       });
       if (response.error) throw new Error(detailFromError(response.error));
-      const result = response.data as VobizLiveKitSetupResponse;
-      if (result.sync_ok) {
+      const data = response.data as VobizLiveKitSetupResponse;
+      setResult(data);
+      if (data.sync_ok) {
         toast.success(
-          `${result.telephony_config_name} is ${result.telephony_config_created ? "created" : "updated"}`,
+          `${data.telephony_config_name} is ${data.telephony_config_created ? "created" : "updated"}`,
         );
       } else {
         toast.warning(
-          `${result.telephony_config_name} was saved, but LiveKit SIP sync needs attention`,
+          `${data.telephony_config_name} was saved, but SIP provisioning needs attention`,
         );
       }
-      if (result.sync_message) {
-        toast.message(result.sync_message);
-      }
+      // Keep the dialog open so the result (and any failure detail) stays
+      // visible instead of vanishing with a toast.
       await onSaved?.();
-      setOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Setup failed");
+      const message = error instanceof Error ? error.message : "Setup failed";
+      setResultError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -481,6 +536,43 @@ export function VobizLiveKitSetupWizard({
                         : "Leave blank to import numbers from the Vobiz account."}
                     </p>
                   </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={testVobiz}
+                        disabled={testing}
+                      >
+                        {testing ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <PlugZap className="h-4 w-4 mr-2" />
+                        )}
+                        Test Vobiz connection
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Checks the account ID and auth token before the full run.
+                      </p>
+                    </div>
+                    {testResult && (
+                      <div
+                        className={[
+                          "flex items-start gap-2 rounded-md border p-2 text-sm",
+                          testResult.ok
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100"
+                            : "border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100",
+                        ].join(" ")}
+                      >
+                        {testResult.ok ? (
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                        ) : (
+                          <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        )}
+                        <span>{testResult.detail}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -548,12 +640,83 @@ export function VobizLiveKitSetupWizard({
                       }
                     />
                   </div>
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-                    <div className="flex items-center gap-2 font-medium">
-                      <CheckCircle2 className="h-4 w-4" />
-                      Ready to configure
+                  {!result && !resultError && (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+                      <div className="flex items-center gap-2 font-medium">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Ready to configure
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {resultError && (
+                    <div className="space-y-2 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100">
+                      <div className="flex items-center gap-2 font-medium">
+                        <XCircle className="h-4 w-4" />
+                        Setup failed
+                      </div>
+                      <p className="break-words">{resultError}</p>
+                    </div>
+                  )}
+
+                  {result && (
+                    <div
+                      className={[
+                        "space-y-3 rounded-md border p-3 text-sm",
+                        result.sync_ok
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100"
+                          : "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-center gap-2 font-medium">
+                        {result.sync_ok ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <AlertTriangle className="h-4 w-4" />
+                        )}
+                        {result.sync_ok
+                          ? "Setup complete"
+                          : "Saved, but SIP provisioning needs attention"}
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <ReviewItem
+                          label="Configuration"
+                          value={`${result.telephony_config_name} (${result.telephony_config_created ? "created" : "updated"})`}
+                        />
+                        <ReviewItem
+                          label="Worker"
+                          value={
+                            result.livekit.worker_managed_by_api
+                              ? result.livekit.worker_running
+                                ? "Running"
+                                : "Stopped"
+                              : "External"
+                          }
+                        />
+                        <ReviewItem
+                          label="Imported numbers"
+                          value={String(result.imported_phone_numbers)}
+                        />
+                        <ReviewItem
+                          label="Active numbers"
+                          value={String(result.active_phone_numbers)}
+                        />
+                        <ReviewItem
+                          label="Inbound workflow"
+                          value={
+                            result.inbound_workflow_id
+                              ? `#${result.inbound_workflow_id}`
+                              : "None"
+                          }
+                        />
+                      </div>
+                      {result.sync_message && (
+                        <p className="break-words border-t border-black/10 pt-2 dark:border-white/10">
+                          {result.sync_message}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -587,14 +750,25 @@ export function VobizLiveKitSetupWizard({
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
               ) : (
-                <Button onClick={submit} disabled={saving || loading}>
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <WandSparkles className="h-4 w-4 mr-2" />
+                <>
+                  <Button onClick={submit} disabled={saving || loading}>
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <WandSparkles className="h-4 w-4 mr-2" />
+                    )}
+                    {saving
+                      ? "Configuring..."
+                      : result || resultError
+                        ? "Re-run setup"
+                        : "Run setup"}
+                  </Button>
+                  {result?.sync_ok && !saving && (
+                    <Button variant="secondary" onClick={() => setOpen(false)}>
+                      Done
+                    </Button>
                   )}
-                  {saving ? "Configuring..." : "Run setup"}
-                </Button>
+                </>
               )}
             </div>
           </DialogFooter>

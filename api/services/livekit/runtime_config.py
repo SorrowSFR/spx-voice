@@ -124,6 +124,38 @@ def is_pipecat_runtime() -> bool:
     return not is_livekit_runtime()
 
 
+# Providers the LiveKit worker (api/services/livekit/worker.py:_create_session)
+# can actually instantiate. The provider registry advertises many more, but a
+# provider that is not in this set validates and saves fine yet silently dies at
+# call time with "LiveKit <X> provider is unsupported". We gate the model UI and
+# config saves against this set when LiveKit is the active runtime so that
+# unsupported choices fail loudly up front. Keep this in sync with
+# `_create_session`. (Note: Google STT/TTS are listed here but are currently not
+# registered in the configuration registry, so intersecting the registry with
+# this set yields only OpenAI for the pipeline STT/TTS sections.)
+LIVEKIT_SUPPORTED_PROVIDERS: dict[str, frozenset[str]] = {
+    "llm": frozenset({"openai", "google"}),
+    "stt": frozenset({"openai", "google"}),
+    "tts": frozenset({"openai", "google"}),
+    "realtime": frozenset(
+        {"openai_realtime", "google_realtime", "google_vertex_realtime"}
+    ),
+}
+
+
+def livekit_supports_provider(service: str, provider: str) -> bool:
+    """Return True if the LiveKit worker can run *provider* for *service*.
+
+    Services not gated here (e.g. ``embeddings``, which the worker does not use)
+    always return True.
+    """
+
+    supported = LIVEKIT_SUPPORTED_PROVIDERS.get(service)
+    if supported is None:
+        return True
+    return provider in supported
+
+
 def livekit_configured() -> bool:
     return effective_livekit_settings().configured
 

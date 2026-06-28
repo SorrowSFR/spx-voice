@@ -218,271 +218,6 @@ async def test_livekit_kb_tool_uses_node_documents_and_embedding_settings(monkey
     }
 
 
-@pytest.mark.asyncio
-async def test_livekit_record_lead_details_tool_persists_sheet_fields(monkeypatch):
-    monkeypatch.setenv(
-        worker.post_call.POST_CALL_WEBHOOK_ENV,
-        "https://example.test/post-call",
-    )
-    graph = _workflow_without_greeting()
-    agent = worker.LiveKitWorkflowAgent(
-        ctx=_job_context(),
-        workflow=graph,
-        workflow_run_id=17,
-        organization_id=9,
-        call_context_vars={},
-    )
-    persisted = []
-
-    async def fake_update_workflow_run(run_id, **kwargs):
-        persisted.append((run_id, kwargs))
-
-    monkeypatch.setattr(
-        worker.db_client,
-        "update_workflow_run",
-        fake_update_workflow_run,
-    )
-
-    start_node = graph.nodes[graph.start_node_id]
-    tools = agent._tools_for_node(start_node)
-    lead_tool = next(tool for tool in tools if tool.id == "record_lead_details")
-
-    result = await lead_tool(
-        {
-            "district": "Rangareddy",
-            "town": "Ibrahimpatnam",
-            "looking_for": "15 kW subsidy for shop",
-            "customer_name": "Ravi",
-            "remarks": "Caller asked about shop subsidy.",
-        }
-    )
-
-    assert result["status"] == "saved"
-    assert result["missing_fields"] == []
-    assert result["lead_details"] == {
-        "district": "Rangareddy",
-        "town": "Ibrahimpatnam",
-        "looking_for": "15 kW subsidy for shop",
-        "customer_name": "Ravi",
-        "remarks": "Caller asked about shop subsidy.",
-    }
-    assert persisted == [
-        (
-            17,
-            {
-                "gathered_context": {
-                    "lead_details": result["lead_details"],
-                    "district": "Rangareddy",
-                    "town": "Ibrahimpatnam",
-                    "looking_for": "15 kW subsidy for shop",
-                    "customer_name": "Ravi",
-                    "remarks": "Caller asked about shop subsidy.",
-                    "looking for": "15 kW subsidy for shop",
-                }
-            },
-        )
-    ]
-
-
-def test_livekit_missing_lead_fields_treats_placeholder_as_missing():
-    lead = {
-        "district": "Rangareddy",
-        "town": "Ibrahimpatnam",
-        "looking_for": "subsidy",
-        "customer_name": "not provided",
-        "remarks": "Caller asked about subsidy.",
-    }
-
-    assert "customer_name" in worker.post_call.missing_lead_fields(lead)
-
-    lead["remarks"] = "Customer name not provided after caller refused."
-
-    assert "customer_name" not in worker.post_call.missing_lead_fields(lead)
-
-
-@pytest.mark.asyncio
-async def test_livekit_record_lead_details_rejects_values_not_said_by_caller(
-    monkeypatch,
-):
-    monkeypatch.setenv(
-        worker.post_call.POST_CALL_WEBHOOK_ENV,
-        "https://example.test/post-call",
-    )
-    graph = _workflow_without_greeting()
-    agent = worker.LiveKitWorkflowAgent(
-        ctx=_job_context(),
-        workflow=graph,
-        workflow_run_id=17,
-        organization_id=9,
-        call_context_vars={},
-    )
-    agent._remember_final_user_transcript("My name is Ravi. I need subsidy details.")
-    persisted = []
-
-    async def fake_update_workflow_run(run_id, **kwargs):
-        persisted.append((run_id, kwargs))
-
-    monkeypatch.setattr(
-        worker.db_client,
-        "update_workflow_run",
-        fake_update_workflow_run,
-    )
-
-    start_node = graph.nodes[graph.start_node_id]
-    lead_tool = next(
-        tool
-        for tool in agent._tools_for_node(start_node)
-        if tool.id == "record_lead_details"
-    )
-
-    result = await lead_tool(
-        {
-            "district": "Hyderabad",
-            "town": "Khairatabad",
-            "looking_for": "subsidy details",
-            "customer_name": "Raju",
-        }
-    )
-
-    assert result["rejected_fields"] == {
-        "district": "Hyderabad",
-        "town": "Khairatabad",
-        "customer_name": "Raju",
-    }
-    assert result["lead_details"]["looking_for"] == "subsidy details"
-    assert result["lead_details"]["district"] == ""
-    assert result["lead_details"]["town"] == ""
-    assert result["lead_details"]["customer_name"] == ""
-    assert result["lead_details"]["remarks"] == "Caller asked about subsidy details."
-    assert result["missing_fields"] == [
-        "district",
-        "town",
-        "customer_name",
-    ]
-    assert result["next_missing_field"] == "district"
-    assert result["next_followup_hint"] == worker.LEAD_FIELD_FOLLOWUP_HINTS["district"]
-    assert "Continue naturally" in result["instruction"]
-    assert persisted
-
-
-@pytest.mark.asyncio
-async def test_livekit_record_lead_details_returns_natural_next_field_hint(
-    monkeypatch,
-):
-    monkeypatch.setenv(
-        worker.post_call.POST_CALL_WEBHOOK_ENV,
-        "https://example.test/post-call",
-    )
-    graph = _workflow_without_greeting()
-    agent = worker.LiveKitWorkflowAgent(
-        ctx=_job_context(),
-        workflow=graph,
-        workflow_run_id=17,
-        organization_id=9,
-        call_context_vars={},
-        uses_realtime=True,
-        realtime_generate_reply_supported=False,
-        realtime_exact_speech_uses_tts=True,
-        tts_api_key="google-api-key",
-    )
-    agent._remember_final_user_transcript("My name is Ravi.")
-    persisted = []
-
-    async def fake_update_workflow_run(run_id, **kwargs):
-        persisted.append((run_id, kwargs))
-
-    monkeypatch.setattr(
-        worker.db_client,
-        "update_workflow_run",
-        fake_update_workflow_run,
-    )
-
-    start_node = graph.nodes[graph.start_node_id]
-    lead_tool = next(
-        tool
-        for tool in agent._tools_for_node(start_node)
-        if tool.id == "record_lead_details"
-    )
-
-    result = await lead_tool({"customer_name": "Ravi"})
-
-    assert result["lead_details"]["customer_name"] == "Ravi"
-    assert result["next_missing_field"] == "district"
-    assert result["next_followup_hint"] == worker.LEAD_FIELD_FOLLOWUP_HINTS["district"]
-    assert "Continue naturally" in result["instruction"]
-    assert "latest question" in result["instruction"]
-    assert persisted
-
-
-@pytest.mark.asyncio
-async def test_livekit_end_transition_blocks_until_required_lead_fields(monkeypatch):
-    monkeypatch.setenv(
-        worker.post_call.POST_CALL_WEBHOOK_ENV,
-        "https://example.test/post-call",
-    )
-    graph = _workflow_with_start_auto_advance()
-    agent = worker.LiveKitWorkflowAgent(
-        ctx=_job_context(),
-        workflow=graph,
-        workflow_run_id=17,
-        organization_id=9,
-        call_context_vars={},
-    )
-    main_node = graph.nodes["main"]
-    end_tool = next(
-        tool for tool in agent._tools_for_node(main_node) if tool.id == "end"
-    )
-
-    result = await end_tool({})
-
-    assert result["status"] == "blocked"
-    assert result["missing_fields"] == [
-        "district",
-        "town",
-        "looking_for",
-        "customer_name",
-        "remarks",
-    ]
-    assert "Do not end the call yet" in result["instruction"]
-
-
-@pytest.mark.asyncio
-async def test_livekit_end_transition_blocks_without_clear_caller_close(
-    monkeypatch,
-):
-    monkeypatch.setenv(
-        worker.post_call.POST_CALL_WEBHOOK_ENV,
-        "https://example.test/post-call",
-    )
-    graph = _workflow_with_start_auto_advance()
-    agent = worker.LiveKitWorkflowAgent(
-        ctx=_job_context(),
-        workflow=graph,
-        workflow_run_id=17,
-        organization_id=9,
-        call_context_vars={},
-    )
-    agent._lead_details = {
-        "district": "Rangareddy",
-        "town": "Ibrahimpatnam",
-        "looking_for": "subsidy",
-        "customer_name": "Ravi",
-        "remarks": "Caller asked about subsidy.",
-    }
-    agent._remember_final_user_transcript("\u0c2e\u0c30\u0c3f\u0c2f\u0c41")
-    main_node = graph.nodes["main"]
-    end_tool = next(
-        tool for tool in agent._tools_for_node(main_node) if tool.id == "end"
-    )
-
-    result = await end_tool({})
-
-    assert result["status"] == "blocked"
-    assert result["missing_fields"] == []
-    assert "has not clearly asked to close" in result["instruction"]
-    assert agent._current_node is None
-
-
 def test_livekit_text_google_session_uses_low_latency_model_settings(monkeypatch):
     captured = {}
 
@@ -871,14 +606,6 @@ async def test_livekit_finalize_persists_usage_and_calculates_cost(monkeypatch):
         recording_url=None,
         logs={},
     )
-    refreshed_run = SimpleNamespace(
-        created_at=completed_run.created_at,
-        initial_context=completed_run.initial_context,
-        gathered_context={},
-        cost_info={"call_duration_seconds": 12, "total_cost_usd": 0.01},
-        recording_url=None,
-        logs={},
-    )
 
     async def fake_update_workflow_run(run_id, **kwargs):
         updates.append((run_id, kwargs))
@@ -890,38 +617,11 @@ async def test_livekit_finalize_persists_usage_and_calculates_cost(monkeypatch):
         AsyncMock(
             side_effect=[
                 SimpleNamespace(cost_info={"call_id": "SCL_1"}),
-                refreshed_run,
             ]
         ),
     )
     monkeypatch.setattr(
         worker.db_client, "update_workflow_run", fake_update_workflow_run
-    )
-    monkeypatch.setattr(
-        worker.post_call,
-        "build_post_call_payload",
-        lambda *args, **kwargs: {
-            "district": "Rangareddy",
-            "town": "Badangpet",
-            "looking_for": "subsidy",
-            "customer_name": "Sai",
-            "remarks": "Collected fields.",
-        },
-    )
-    monkeypatch.setattr(
-        worker.post_call,
-        "lead_details_gathered_context",
-        lambda fields: {"lead_details": fields},
-    )
-
-    async def fake_send_post_call_webhook(payload):
-        events.append("webhook")
-        return {"sent": True}
-
-    monkeypatch.setattr(
-        worker.post_call,
-        "send_post_call_webhook",
-        fake_send_post_call_webhook,
     )
 
     async def fake_calculate_cost(run_id):
@@ -952,97 +652,8 @@ async def test_livekit_finalize_persists_usage_and_calculates_cost(monkeypatch):
         "call_id": "SCL_1",
         "call_duration_seconds": 12,
     }
-    assert updates[1][1]["logs"]["post_call_webhook"] == {"sent": True}
     calculate_cost.assert_awaited_once_with(41)
-    assert events == ["cost", "webhook"]
-
-
-def test_livekit_post_call_payload_uses_metadata_and_transcript_fallback():
-    run = SimpleNamespace(
-        created_at=datetime(2026, 5, 31, 6, 49, 56, tzinfo=timezone.utc),
-        initial_context={
-            "caller_number": "+15555550123",
-            "called_number": "+15555550124",
-            "participant_attributes": {
-                "sip.phoneNumber": "+15555550123",
-                "sip.trunkPhoneNumber": "+15555550124",
-            },
-        },
-        gathered_context={},
-        cost_info={"call_duration_seconds": 129},
-        recording_url=None,
-        logs={},
-    )
-    logs = {
-        "realtime_feedback_events": [
-            {
-                "type": "rtf-user-transcription",
-                "payload": {
-                    "text": (
-                        "\u0c2e\u0c3e\u0c26\u0c3f "
-                        "\u0c30\u0c02\u0c17\u0c3e "
-                        "\u0c30\u0c46\u0c21\u0c4d\u0c21\u0c3f. "
-                        "15 kW subsidy and shop registration cost"
-                    ),
-                    "final": True,
-                },
-            }
-        ]
-    }
-
-    payload = worker.post_call.build_post_call_payload(
-        run,
-        logs=logs,
-        recording_url="https://bucket.example/recordings/57.mp3",
-    )
-
-    assert payload["customer_number"] == "+15555550123"
-    assert payload["rep_number"] == "+15555550124"
-    assert payload["called_at"] == "2026-05-31T06:49:56+00:00"
-    assert payload["duration"] == 129
-    assert payload["district"] == "Rangareddy"
-    assert "15 kW" in payload["looking_for"]
-    assert "shop" in payload["looking_for"]
-    assert payload["looking for"] == payload["looking_for"]
-    assert payload["recording_url"] == "https://bucket.example/recordings/57.mp3"
-    assert payload["remarks"].startswith("Caller asked about")
-
-
-def test_livekit_post_call_payload_does_not_keep_placeholder_or_unsupported_leads():
-    run = SimpleNamespace(
-        created_at=datetime(2026, 5, 31, 6, 49, 56, tzinfo=timezone.utc),
-        initial_context={"caller_number": "+9170", "called_number": "+9180"},
-        gathered_context={
-            "lead_details": {
-                "district": "Hyderabad",
-                "town": "not provided",
-                "looking_for": "",
-                "customer_name": "Raju",
-                "remarks": "Caller asked about subsidy.",
-            }
-        },
-        cost_info={"call_duration_seconds": 90},
-        recording_url=None,
-        logs={},
-    )
-    logs = {
-        "realtime_feedback_events": [
-            {
-                "type": "rtf-user-transcription",
-                "payload": {
-                    "text": "My name is Ravi. town is Badangpet. 15 kW subsidy",
-                    "final": True,
-                },
-            }
-        ]
-    }
-
-    payload = worker.post_call.build_post_call_payload(run, logs=logs)
-
-    assert payload["district"] == ""
-    assert payload["town"].startswith("Badangpet")
-    assert payload["customer_name"] == "Ravi"
-    assert "15 kW" in payload["looking_for"]
+    assert events == ["cost"]
 
 
 def test_livekit_recording_key_uses_default_inbound_prefix():
@@ -1071,33 +682,6 @@ def test_livekit_recording_url_resolves_to_default_object_key(monkeypatch):
     assert worker.post_call.workflow_run_id_from_recording_key(key) == 60
 
 
-def test_livekit_post_call_payload_omits_failed_recording_url():
-    run = SimpleNamespace(
-        created_at=datetime(2026, 5, 31, 6, 49, 56, tzinfo=timezone.utc),
-        initial_context={"caller_number": "+9170", "called_number": "+9180"},
-        gathered_context={
-            "lead_details": {
-                "district": "Rangareddy",
-                "town": "Badangpet",
-                "looking_for": "subsidy",
-                "customer_name": "Sai Kiran",
-                "remarks": "Recording failed.",
-            },
-            "livekit_recording": {
-                "status": "failed",
-                "recording_url": "https://bucket.example/SPX-VOICE-INBOUND/failed.mp3",
-            },
-        },
-        cost_info={"call_duration_seconds": 10},
-        recording_url=None,
-        logs={},
-    )
-
-    payload = worker.post_call.build_post_call_payload(run)
-
-    assert payload["recording_url"] == ""
-
-
 def test_livekit_professional_persona_does_not_prompt_casual_phrases():
     casual_examples = [
         "Namaskaram ji",
@@ -1117,13 +701,14 @@ def test_livekit_professional_persona_does_not_prompt_casual_phrases():
     ]
     prompt = worker.FAST_RESPONSE_INSTRUCTIONS
 
-    assert "professional SPX Voice assistant" in prompt
-    assert "honorific-heavy phrasing" in prompt
-    assert "casual blessings or sign-offs" in prompt
+    assert "professional voice assistant" in prompt
     assert "Do not ask for OTPs" in prompt
     assert "Do not promise messages" in prompt
-    assert "Required tracking fields" in prompt
-    assert "record_lead_details" in prompt
+    # The generic low-latency persona must stay tenant-neutral: deployment- and
+    # language-specific lead-capture details belong to the opt-in lead block.
+    assert "Required tracking fields" not in prompt
+    assert "record_lead_details" not in prompt
+    assert "saar" not in prompt.lower()
     for term in casual_examples:
         assert term.lower() not in prompt.lower()
 
@@ -1336,7 +921,6 @@ async def test_livekit_realtime_opening_cache_failure_records_fallback(monkeypat
 async def test_livekit_immutable_realtime_auto_advance_skips_session_updates(
     monkeypatch,
 ):
-    monkeypatch.delenv(worker.post_call.POST_CALL_WEBHOOK_ENV, raising=False)
     graph = _workflow_with_start_auto_advance()
     agent = worker.LiveKitWorkflowAgent(
         ctx=_job_context(),
@@ -1463,51 +1047,6 @@ def test_livekit_write_pcm_wav_can_pad_opening_audio(tmp_path):
         )
 
 
-def test_livekit_close_text_detection():
-    telugu_call_end = (
-        "\u0c28\u0c47\u0c28\u0c41 "
-        "\u0c15\u0c3e\u0c32\u0c4d "
-        "\u0c0e\u0c02\u0c21\u0c4d "
-        "\u0c1a\u0c47\u0c38\u0c4d\u0c24\u0c41"
-        "\u0c28\u0c4d\u0c28\u0c3e\u0c28\u0c41"
-    )
-    telugu_thanks = "\u0c27\u0c28\u0c4d\u0c2f\u0c35\u0c3e" "\u0c26\u0c3e\u0c32\u0c41"
-    telugu_no_questions = "\u0c0f\u0c02 \u0c32\u0c47\u0c35\u0c41"
-
-    assert worker._is_assistant_close_text(telugu_call_end)
-    assert worker._is_assistant_close_text(
-        "\u0c38\u0c30\u0c47, "
-        "\u0c27\u0c28\u0c4d\u0c2f\u0c35\u0c3e\u0c26\u0c3e\u0c32\u0c41. "
-        "\u0c2e\u0c40\u0c15\u0c41 "
-        "\u0c07\u0c02\u0c15\u0c47\u0c2e\u0c48\u0c28\u0c3e "
-        "\u0c2a\u0c4d\u0c30\u0c36\u0c4d\u0c28\u0c32\u0c41 "
-        "\u0c09\u0c02\u0c1f\u0c47 "
-        "\u0c0e\u0c2a\u0c4d\u0c2a\u0c41\u0c21\u0c48\u0c28\u0c3e "
-        "\u0c05\u0c21\u0c17\u0c02\u0c21\u0c3f."
-    )
-    assert worker._is_assistant_close_text("Thanks, I am ending the call now.")
-    assert worker._is_assistant_close_text("Dhanyavadalu, call mugistunnanu.")
-    assert worker._is_assistant_close_text("Call end chestunnanu.")
-    assert worker._is_user_close_text(telugu_thanks)
-    assert worker._is_user_close_text(telugu_no_questions)
-    assert worker._is_user_close_text("thank you, bye")
-    assert not worker._is_user_close_text(
-        "\u0c28\u0c3e\u0c15\u0c41 "
-        "\u0c32\u0c46\u0c1f\u0c30\u0c4d "
-        "\u0c2c\u0c48 "
-        "\u0c39\u0c3e\u0c30\u0c4d\u0c1f\u0c4d "
-        "\u0c38\u0c4d\u0c2a\u0c46\u0c32\u0c4d\u0c32\u0c3f\u0c02\u0c17\u0c4d "
-        "\u0c1a\u0c46\u0c2a\u0c4d\u0c2a\u0c2e\u0c4d\u0c2e\u0c3e"
-    )
-    assert not worker._is_assistant_close_text("Please explain the subsidy.")
-    assert not worker._is_user_close_text("What documents are required?")
-    assert not worker._is_user_close_text(
-        "\u0c38\u0c30\u0c47, \u0c28\u0c3e \u0c07\u0c02"
-        "\u0c1f\u0c3f\u0c15\u0c3f \u0c15\u0c3e\u0c35\u0c3e\u0c32\u0c3f"
-    )
-
-
-@pytest.mark.asyncio
 async def test_livekit_schedule_shutdown_emits_completion_and_shuts_down(monkeypatch):
     graph = _workflow_without_greeting()
     ctx = _job_context()
@@ -1564,7 +1103,6 @@ async def test_livekit_schedule_shutdown_deletes_room_before_worker_shutdown(
 async def test_livekit_opening_auto_advances_single_non_end_start_transition(
     monkeypatch,
 ):
-    monkeypatch.delenv(worker.post_call.POST_CALL_WEBHOOK_ENV, raising=False)
     graph = _workflow_with_start_auto_advance()
     agent = worker.LiveKitWorkflowAgent(
         ctx=_job_context(),
@@ -1624,3 +1162,58 @@ async def test_livekit_opening_auto_advances_single_non_end_start_transition(
     assert '"Hello."' in observed["instructions"]
     assert observed["tools"] == ["end"]
     assert agent._current_node.id == "main"
+
+
+def _realtime_config(model="gemini-3.1-flash-live-preview"):
+    return SimpleNamespace(
+        is_realtime=True,
+        realtime=SimpleNamespace(
+            provider=ServiceProviders.GOOGLE_REALTIME,
+            model=model,
+            voice="Kore",
+            language="en",
+        ),
+        llm=None,
+        stt=None,
+        tts=None,
+    )
+
+
+def test_uses_realtime_requires_realtime_section():
+    cfg = _realtime_config()
+    assert worker._uses_realtime(cfg) is True
+
+    # is_realtime flag set but no realtime section -> NOT realtime (no split brain)
+    cfg_missing = SimpleNamespace(is_realtime=True, realtime=None)
+    assert worker._uses_realtime(cfg_missing) is False
+
+    cfg_pipeline = SimpleNamespace(is_realtime=False, realtime=None)
+    assert worker._uses_realtime(cfg_pipeline) is False
+
+
+def test_runtime_configuration_reports_mode():
+    realtime_mode = worker._runtime_configuration_from_user_config(_realtime_config())
+    assert realtime_mode["mode"] == "realtime"
+
+    pipeline_cfg = SimpleNamespace(
+        is_realtime=True,
+        realtime=None,
+        llm=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4.1"),
+        stt=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4o-transcribe"),
+        tts=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4o-mini-tts"),
+    )
+    pipeline_mode = worker._runtime_configuration_from_user_config(pipeline_cfg)
+    assert pipeline_mode["mode"] == "pipeline"
+
+
+def test_supports_realtime_generate_reply_prefix_match():
+    google = ServiceProviders.GOOGLE_REALTIME.value
+    # The known unsupported preview model.
+    assert worker._supports_realtime_generate_reply(google, "gemini-3.1-flash-live-preview") is False
+    # A "3.1"-containing but unrelated name must NOT be misclassified.
+    assert worker._supports_realtime_generate_reply(google, "gemini-3.10-pro-live") is True
+    assert worker._supports_realtime_generate_reply(google, "gemini-2.5-flash-live") is True
+    # Non-google realtime providers always support it here.
+    assert worker._supports_realtime_generate_reply(
+        ServiceProviders.OPENAI_REALTIME.value, "gpt-realtime"
+    ) is True

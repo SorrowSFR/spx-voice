@@ -28,6 +28,7 @@ from api.services.livekit.vobiz import (
     import_vobiz_phone_numbers,
     preserve_vobiz_livekit_credentials,
     sync_vobiz_livekit_config,
+    verify_vobiz_credentials,
 )
 from api.services.livekit.worker_process import (
     apply_livekit_worker_settings,
@@ -131,6 +132,34 @@ class VobizLiveKitSetupResponse(BaseModel):
     inbound_workflow_id: int | None = None
     sync_ok: bool
     sync_message: str | None = None
+
+
+class VobizTestConnectionRequest(BaseModel):
+    vobiz_auth_id: str = Field(..., min_length=1)
+    vobiz_auth_token: str = Field(..., min_length=1)
+
+
+class VobizTestConnectionResponse(BaseModel):
+    ok: bool
+    detail: str
+    number_count: int | None = None
+
+
+@router.post("/vobiz/test-connection", response_model=VobizTestConnectionResponse)
+async def test_vobiz_connection(
+    request: VobizTestConnectionRequest,
+    user: UserModel = Depends(get_user),
+) -> VobizTestConnectionResponse:
+    if not user.selected_organization_id:
+        raise HTTPException(status_code=400, detail="No organization selected")
+    result = await verify_vobiz_credentials(
+        request.vobiz_auth_id, request.vobiz_auth_token
+    )
+    return VobizTestConnectionResponse(
+        ok=bool(result.get("ok")),
+        detail=str(result.get("detail", "")),
+        number_count=result.get("number_count"),
+    )
 
 
 @router.get("/runtime", response_model=LiveKitRuntimeResponse)
@@ -383,13 +412,24 @@ async def _sync_vobiz_livekit_config_safely(**kwargs) -> VobizLiveKitSyncResult:
 
 def _livekit_sync_error_message(exc: Exception) -> str:
     text = str(exc)
-    if "401" in text and "livekit" in text.lower():
+    low = text.lower()
+    prefix = "Vobiz config was saved locally, but SIP provisioning failed: "
+    if "401" in text and "livekit" in low:
         return (
-            "Vobiz config was saved locally, but LiveKit SIP provisioning failed: "
-            "LiveKit rejected the API key/secret (401 Unauthorized). Update "
-            "LiveKit settings or rerun setup with SIP provisioning disabled."
+            f"{prefix}LiveKit rejected the API key/secret (401 Unauthorized). "
+            "Update LiveKit settings or rerun setup with SIP provisioning disabled."
         )
-    return f"Vobiz config was saved locally, but LiveKit SIP provisioning failed: {text}"
+    if ("401" in text or "403" in text) and "vobiz" in low:
+        return (
+            f"{prefix}Vobiz rejected the account ID / auth token. Re-check the "
+            "Vobiz credentials and rerun setup."
+        )
+    if "failed to reach vobiz" in low or "timeout" in low:
+        return (
+            f"{prefix}the Vobiz API could not be reached (timeout or network "
+            "error). Check connectivity and try again."
+        )
+    return f"{prefix}{text}"
 
 
 @router.post(
