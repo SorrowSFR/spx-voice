@@ -519,3 +519,43 @@ async def test_sync_livekit_dispatch_rules_deletes_stale_rule_before_recreate(
             "room_prefix": "spx-voice-wf-2-",
         }
     }
+
+
+@pytest.mark.asyncio
+async def test_verify_vobiz_credentials_ok(monkeypatch):
+    monkeypatch.setattr(
+        vobiz_service,
+        "_vobiz_request_json",
+        AsyncMock(return_value={"items": [{"phone_number": "+15551230000"}]}),
+    )
+
+    result = await vobiz_service.verify_vobiz_credentials("MA_1", "token")
+
+    assert result["ok"] is True
+    assert result["number_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_verify_vobiz_credentials_reports_auth_failure(monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(
+        vobiz_service,
+        "_vobiz_request_json",
+        AsyncMock(
+            side_effect=HTTPException(status_code=401, detail="Vobiz API 401: nope")
+        ),
+    )
+
+    result = await vobiz_service.verify_vobiz_credentials("MA_1", "bad")
+
+    assert result["ok"] is False
+    assert "401" in result["detail"]
+    assert result["number_count"] is None
+
+
+@pytest.mark.asyncio
+async def test_verify_vobiz_credentials_requires_inputs():
+    result = await vobiz_service.verify_vobiz_credentials("", "")
+
+    assert result["ok"] is False
