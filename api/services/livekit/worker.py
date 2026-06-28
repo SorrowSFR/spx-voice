@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 import time
 import uuid
@@ -71,26 +72,26 @@ FAST_INTERRUPTION_MIN_WORDS = 2
 FALSE_INTERRUPTION_TIMEOUT_SECONDS = 1.5
 FAST_PREEMPTIVE_MAX_SPEECH_DURATION_SECONDS = 3.2
 FAST_LATENCY_PROFILE_MARKERS = ("fast", "insane", "low_latency", "ultra")
+# Generic, tenant-neutral low-latency guidance. Workflow-specific data
+# collection (e.g. lead capture) is added separately and only when that feature
+# is enabled, so this prompt must not hardcode any one deployment's fields,
+# language, or honorifics.
 FAST_RESPONSE_INSTRUCTIONS = """\nPROFESSIONAL VOICE ASSISTANT:
-You are a professional SPX Voice assistant for the configured workflow.
+You are a professional voice assistant for the configured workflow.
 
-Tone: courteous, neutral, concise, and official. Avoid honorific-heavy phrasing, casual blessings or sign-offs, slang, jokes, flirting, and filler.
+Tone: courteous, neutral, concise, and official. Avoid slang, jokes, flirting, and filler.
 
 Call flow:
 - Answer the caller's latest question first in one short sentence.
-- Then collect one missing tracking field only.
-- Required tracking fields: customer_name, district, town, looking_for, remarks.
-- Use record_lead_details when a field is learned or corrected.
-- Only save customer_name, district, and town when the caller explicitly says them in this call. Never infer from examples, phone number, office location, prior calls, or memory.
+- Follow the workflow's node instructions for what to ask or collect next.
 - Use tool results as guidance only. Do not sound like an IVR; keep replies conversational and responsive.
 
 Speech:
 - Mirror the caller's language when possible.
-- Use "saar", "madam", or "andi" sparingly and professionally.
 - Never repeat the opening identity unless asked who is speaking.
 - Do not ask for OTPs, bank details, payment details, government IDs, or other sensitive personal data unless the workflow explicitly requires it and the caller has consented.
 - Do not promise messages, links, callbacks, or third-party actions unless the workflow provides that capability.
-- Close only after a clear caller close intent and complete tracking fields."""
+- Close only after a clear caller close intent."""
 LEAD_CAPTURE_INSTRUCTIONS = """\
 LEAD CAPTURE:
 - Required sheet fields from the conversation: customer_name, district, town, looking_for, remarks.
@@ -124,7 +125,13 @@ USER_CLOSE_RE = re.compile(
     re.IGNORECASE,
 )
 USER_CLOSE_INTENT_TTL_SECONDS = 45.0
-DEFAULT_END_CALL_TEXT = "Dhanyavadalu, call mugistunnanu."
+# Tenant-neutral defaults. A deployment that wants a different closing line,
+# realtime voice, or language can override these via env without code changes.
+DEFAULT_END_CALL_TEXT = os.getenv(
+    "LIVEKIT_DEFAULT_END_CALL_TEXT", "Thank you, ending the call now."
+)
+DEFAULT_REALTIME_VOICE = os.getenv("LIVEKIT_DEFAULT_REALTIME_VOICE", "Kore")
+DEFAULT_REALTIME_LANGUAGE = os.getenv("LIVEKIT_DEFAULT_REALTIME_LANGUAGE", "en-US")
 LEAD_COLLECTION_FIELDS = ("customer_name", "district", "town", "looking_for")
 LEAD_FIELD_FOLLOWUP_HINTS = {
     "customer_name": "ask for the caller's name",
@@ -838,8 +845,8 @@ class LiveKitWorkflowAgent(Agent):
         realtime_exact_speech_uses_tts: bool = False,
         tts_api_key: str | None = None,
         opening_model: str | None = None,
-        tts_voice: str = "Leda",  # Gemini voice id, not the assistant name.
-        tts_language: str = "te-IN",  # Telugu - India
+        tts_voice: str = DEFAULT_REALTIME_VOICE,  # Gemini voice id, not assistant name.
+        tts_language: str = DEFAULT_REALTIME_LANGUAGE,
         latency_profile: str | None = None,
     ) -> None:
         self._ctx = ctx
@@ -2440,13 +2447,13 @@ async def entrypoint(ctx: JobContext) -> None:
                 if user_config.is_realtime and user_config.realtime
                 else None
             )
-            or "Leda",  # Gemini voice id, not the assistant name.
+            or DEFAULT_REALTIME_VOICE,  # Gemini voice id, not the assistant name.
             tts_language=(
                 getattr(user_config.realtime, "language", None)
                 if user_config.is_realtime and user_config.realtime
                 else None
             )
-            or "te-IN",
+            or DEFAULT_REALTIME_LANGUAGE,
             latency_profile=latency_profile,
         )
         _register_feedback_handlers(session, agent)

@@ -1117,13 +1117,14 @@ def test_livekit_professional_persona_does_not_prompt_casual_phrases():
     ]
     prompt = worker.FAST_RESPONSE_INSTRUCTIONS
 
-    assert "professional SPX Voice assistant" in prompt
-    assert "honorific-heavy phrasing" in prompt
-    assert "casual blessings or sign-offs" in prompt
+    assert "professional voice assistant" in prompt
     assert "Do not ask for OTPs" in prompt
     assert "Do not promise messages" in prompt
-    assert "Required tracking fields" in prompt
-    assert "record_lead_details" in prompt
+    # The generic low-latency persona must stay tenant-neutral: deployment- and
+    # language-specific lead-capture details belong to the opt-in lead block.
+    assert "Required tracking fields" not in prompt
+    assert "record_lead_details" not in prompt
+    assert "saar" not in prompt.lower()
     for term in casual_examples:
         assert term.lower() not in prompt.lower()
 
