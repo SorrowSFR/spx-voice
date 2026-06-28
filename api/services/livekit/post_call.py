@@ -8,13 +8,11 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-import httpx
 from loguru import logger
 
 from api.services.livekit.runtime_config import effective_livekit_settings
 
 
-POST_CALL_WEBHOOK_ENV = "SPX_VOICE_POST_CALL_WEBHOOK_URL"
 RECORDINGS_S3_ENDPOINT_ENV = "SPX_VOICE_RECORDINGS_S3_ENDPOINT_URL"
 RECORDINGS_S3_BUCKET_ENV = "SPX_VOICE_RECORDINGS_S3_BUCKET"
 RECORDINGS_S3_ACCESS_KEY_ENV = "SPX_VOICE_RECORDINGS_S3_ACCESS_KEY_ID"
@@ -25,34 +23,11 @@ RECORDINGS_PUBLIC_BASE_ENV = "SPX_VOICE_RECORDINGS_PUBLIC_BASE_URL"
 RECORDINGS_KEY_PREFIX_ENV = "SPX_VOICE_RECORDINGS_KEY_PREFIX"
 
 
-LEAD_FIELDS = ("district", "town", "looking_for", "customer_name", "remarks")
-REQUIRED_LEAD_FIELDS = LEAD_FIELDS
-WEBHOOK_TIMEOUT_SECONDS = 8.0
 DEFAULT_RECORDING_REGION = "us-east-1"
 DEFAULT_RECORDING_PREFIX = "SPX-VOICE-INBOUND"
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _NON_KEY_RE = re.compile(r"[^A-Za-z0-9_.-]+")
-_PLACEHOLDER_LEAD_VALUE_RE = re.compile(
-    r"^(?:not\s+(?:provided|available|known|shared|collected)|"
-    r"unknown|n/?a|none|null|nil|refused|declined|"
-    r"did\s+not\s+provide|caller\s+did\s+not\s+provide)$",
-    re.IGNORECASE,
-)
-_REFUSAL_NOTE_RE = re.compile(
-    r"(?:refus(?:ed|es|al)|declin(?:ed|es)|not\s+provided|"
-    r"did\s+not\s+provide|does\s+not\s+know|don't\s+know|"
-    r"not\s+shared|unavailable|not\s+available|not\s+collected|"
-    r"\u0c1a\u0c46\u0c2a\u0c4d\u0c2a\u0c32\u0c47\u0c26\u0c41|"
-    r"\u0c24\u0c46\u0c32\u0c3f\u0c2f\u0c26\u0c41)",
-    re.IGNORECASE,
-)
-_FIELD_REFUSAL_ALIASES: dict[str, tuple[str, ...]] = {
-    "district": ("district", "jilla", "zilla"),
-    "town": ("town", "village", "mandal", "locality", "location"),
-    "looking_for": ("looking for", "looking_for", "requirement", "enquiry"),
-    "customer_name": ("customer name", "customer_name", "caller name", "name"),
-}
 
 
 @dataclass(frozen=True)
@@ -81,110 +56,10 @@ class _RecordingConfig:
     key_prefix: str
 
 
-def post_call_webhook_url() -> str:
-    return _env_first(POST_CALL_WEBHOOK_ENV)
-
-
-def post_call_enabled() -> bool:
-    return bool(post_call_webhook_url())
-
-
-def normalize_lead_value(value: Any) -> str:
+def _normalize_text(value: Any) -> str:
     if value is None:
         return ""
     return _WHITESPACE_RE.sub(" ", str(value)).strip()
-
-
-def is_placeholder_lead_value(value: Any) -> bool:
-    cleaned = normalize_lead_value(value).strip(" .,:;_-")
-    return bool(cleaned and _PLACEHOLDER_LEAD_VALUE_RE.fullmatch(cleaned))
-
-
-def _lead_field_has_refusal_note(
-    lead: dict[str, Any] | None,
-    field: str,
-) -> bool:
-    if field == "remarks":
-        return False
-    remarks = normalize_lead_value((lead or {}).get("remarks"))
-    if not remarks or not _REFUSAL_NOTE_RE.search(remarks):
-        return False
-
-    remarks_for_match = remarks.lower().replace("_", " ")
-    aliases = _FIELD_REFUSAL_ALIASES.get(field, (field.replace("_", " "),))
-    return any(alias.replace("_", " ") in remarks_for_match for alias in aliases)
-
-
-def is_missing_lead_value(
-    value: Any,
-    *,
-    lead: dict[str, Any] | None = None,
-    field: str | None = None,
-) -> bool:
-    cleaned = normalize_lead_value(value)
-    if not cleaned:
-        return True
-    if is_placeholder_lead_value(cleaned):
-        return not (
-            field is not None and _lead_field_has_refusal_note(lead, field)
-        )
-    return False
-
-
-def extract_lead_details(gathered_context: dict[str, Any] | None) -> dict[str, str]:
-    gathered_context = gathered_context or {}
-    sources = [gathered_context]
-    nested = gathered_context.get("lead_details")
-    if isinstance(nested, dict):
-        sources.insert(0, nested)
-
-    lead = {field: "" for field in LEAD_FIELDS}
-    for source in sources:
-        for field in LEAD_FIELDS:
-            value = source.get(field)
-            if value in (None, "") and field == "looking_for":
-                value = source.get("looking for")
-            cleaned = normalize_lead_value(value)
-            if cleaned:
-                lead[field] = cleaned
-    return lead
-
-
-def merge_lead_details(
-    existing: dict[str, Any] | None,
-    updates: dict[str, Any] | None,
-) -> dict[str, str]:
-    lead = {field: normalize_lead_value((existing or {}).get(field)) for field in LEAD_FIELDS}
-    for field in LEAD_FIELDS:
-        value = normalize_lead_value((updates or {}).get(field))
-        if value:
-            current = lead[field]
-            if (
-                is_placeholder_lead_value(value)
-                and current
-                and not is_placeholder_lead_value(current)
-            ):
-                continue
-            lead[field] = value
-    return lead
-
-
-def missing_lead_fields(lead: dict[str, Any] | None) -> list[str]:
-    lead = lead or {}
-    return [
-        field
-        for field in REQUIRED_LEAD_FIELDS
-        if is_missing_lead_value(lead.get(field), lead=lead, field=field)
-    ]
-
-
-def lead_details_gathered_context(lead: dict[str, Any]) -> dict[str, Any]:
-    normalized = {field: normalize_lead_value(lead.get(field)) for field in LEAD_FIELDS}
-    return {
-        "lead_details": normalized,
-        **normalized,
-        "looking for": normalized["looking_for"],
-    }
 
 
 def _truthy_env(name: str, *, default: bool = False) -> bool:
@@ -254,7 +129,7 @@ def _recording_key_prefix() -> str:
 
 
 def recording_object_key_from_url_or_key(value: str | None) -> str:
-    raw = normalize_lead_value(value)
+    raw = _normalize_text(value)
     if not raw:
         return ""
 
@@ -367,8 +242,8 @@ def _recording_state_from_egress_info(
     fallback_status: str,
 ) -> LiveKitRecordingState:
     status_name = _egress_status_name(livekit_api, getattr(info, "status", None))
-    error = normalize_lead_value(getattr(info, "error", None)) or None
-    details = normalize_lead_value(getattr(info, "details", None)) or None
+    error = _normalize_text(getattr(info, "error", None)) or None
+    details = _normalize_text(getattr(info, "details", None)) or None
     status = status_name.lower() if status_name else fallback_status
     if error or "FAILED" in status_name or "ABORTED" in status_name:
         status = "failed"
@@ -420,8 +295,8 @@ def recording_available_url(
         status = state.status
         url = state.recording_url
     elif isinstance(state, dict):
-        status = normalize_lead_value(state.get("status"))
-        url = normalize_lead_value(state.get("recording_url"))
+        status = _normalize_text(state.get("status"))
+        url = _normalize_text(state.get("recording_url"))
     else:
         return ""
     return url if status in {"complete", "stopped"} else ""
@@ -576,285 +451,3 @@ async def stop_livekit_room_recording(
             status="stop_failed",
             error=str(exc),
         )
-
-
-def _first_present(*values: Any) -> str:
-    for value in values:
-        cleaned = normalize_lead_value(value)
-        if cleaned:
-            return cleaned
-    return ""
-
-
-def _participant_attrs(initial_context: dict[str, Any]) -> dict[str, Any]:
-    attrs = initial_context.get("participant_attributes")
-    return attrs if isinstance(attrs, dict) else {}
-
-
-def _iso_datetime(value: Any) -> str:
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.isoformat()
-    cleaned = normalize_lead_value(value)
-    if cleaned:
-        return cleaned
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _text_from_content(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for part in content:
-            if isinstance(part, str):
-                parts.append(part)
-            elif isinstance(part, dict):
-                parts.append(normalize_lead_value(part.get("text")))
-        return " ".join(part for part in parts if part).strip()
-    return ""
-
-
-def _conversation_texts(logs: dict[str, Any] | None, role: str) -> list[str]:
-    logs = logs or {}
-    texts: list[str] = []
-    for event in logs.get("realtime_feedback_events") or []:
-        if not isinstance(event, dict):
-            continue
-        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
-        if role == "user" and event.get("type") == "rtf-user-transcription":
-            if payload.get("final") is False:
-                continue
-            text = normalize_lead_value(payload.get("text"))
-            if text:
-                texts.append(text)
-        elif role == "assistant" and event.get("type") == "rtf-bot-text":
-            text = normalize_lead_value(payload.get("text"))
-            if text:
-                texts.append(text)
-
-    history = logs.get("livekit_history")
-    if isinstance(history, dict):
-        for item in history.get("items") or []:
-            if not isinstance(item, dict) or item.get("role") != role:
-                continue
-            text = normalize_lead_value(_text_from_content(item.get("content")))
-            if text:
-                texts.append(text)
-    return texts
-
-
-_DISTRICT_ALIASES: dict[str, tuple[str, ...]] = {}
-
-
-def _infer_district(text: str) -> str:
-    lowered = text.lower()
-    for district, aliases in _DISTRICT_ALIASES.items():
-        if any(alias.lower() in lowered for alias in aliases):
-            return district
-    return ""
-
-
-def _infer_name(text: str) -> str:
-    patterns = [
-        r"(?:my name is|name is|i am)\s+([A-Za-z][A-Za-z .]{1,40})",
-        r"\u0c28\u0c3e\s+\u0c2a\u0c47\u0c30\u0c41\s+([\u0c00-\u0c7fA-Za-z .]{2,40})",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            raw_name = match.group(1)
-            raw_name = re.split(r"[.,;:]", raw_name, maxsplit=1)[0]
-            raw_name = re.split(
-                r"\b(?:town|village|district|mandal|location|need|want|"
-                r"subsidy|cost|registration)\b",
-                raw_name,
-                maxsplit=1,
-                flags=re.IGNORECASE,
-            )[0]
-            return normalize_lead_value(raw_name.strip(" .,:;"))
-    return ""
-
-
-def _infer_town(text: str) -> str:
-    patterns = [
-        r"(?:town|village|location|mandal)\s*(?:is|:)?\s+([A-Za-z][A-Za-z .-]{1,50})",
-        r"(?:\u0c0a\u0c30\u0c41|\u0c17\u0c4d\u0c30\u0c3e\u0c2e\u0c02|\u0c32\u0c4a\u0c15\u0c47\u0c37\u0c28\u0c4d|\u0c2e\u0c02\u0c21\u0c32\u0c02)\s+([\u0c00-\u0c7fA-Za-z .-]{2,50})",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return normalize_lead_value(match.group(1).strip(" .,:;"))
-    return ""
-
-
-def _infer_looking_for(text: str) -> str:
-    lowered = text.lower()
-    parts: list[str] = []
-    # Match against the original text so the capacity token keeps its casing
-    # (e.g. "15 kW", not "15 kw").
-    match = re.search(r"\b\d+\s*(?:kw|k w|kilowatt)", text, re.IGNORECASE)
-    if match:
-        parts.append(match.group(0))
-    if "shop" in lowered:
-        parts.append("shop enquiry")
-    if "subsid" in lowered:
-        parts.append("subsidy information")
-    if "registration" in lowered or "register" in lowered or "\u0c30\u0c3f\u0c1c\u0c3f\u0c38\u0c4d\u0c1f\u0c4d\u0c30" in text:
-        parts.append("registration process")
-    if "cost" in lowered or "rate" in lowered or "\u0c16\u0c30\u0c4d\u0c1a" in text:
-        parts.append("cost estimate")
-    if "vendor" in lowered or "\u0c35\u0c46\u0c02\u0c21\u0c30\u0c4d" in text:
-        parts.append("vendor details")
-    if not parts and text.strip():
-        parts.append("general enquiry")
-    return ", ".join(dict.fromkeys(parts))
-
-
-def _lead_value_appears_in_user_text(value: Any, user_text: str) -> bool:
-    cleaned = normalize_lead_value(value)
-    text = normalize_lead_value(user_text)
-    if not cleaned or not text:
-        return False
-    return cleaned.lower() in text.lower()
-
-
-def user_evidence_supports_lead_value(
-    field: str,
-    value: Any,
-    user_text: str,
-) -> bool:
-    if field not in LEAD_FIELDS:
-        return True
-    cleaned = normalize_lead_value(value)
-    if not cleaned or is_placeholder_lead_value(cleaned):
-        return True
-    text = normalize_lead_value(user_text)
-    if not text:
-        return True
-    if field == "district":
-        inferred = _infer_district(text)
-        return inferred == cleaned or _lead_value_appears_in_user_text(cleaned, text)
-    if field in {"town", "customer_name"}:
-        return _lead_value_appears_in_user_text(cleaned, text)
-    return True
-
-
-def infer_lead_details_from_logs(logs: dict[str, Any] | None) -> dict[str, str]:
-    user_text = " ".join(_conversation_texts(logs, "user"))
-    lead = {field: "" for field in LEAD_FIELDS}
-    if not user_text.strip():
-        return lead
-    lead["district"] = _infer_district(user_text)
-    lead["town"] = _infer_town(user_text)
-    lead["looking_for"] = _infer_looking_for(user_text)
-    lead["customer_name"] = _infer_name(user_text)
-    if lead["looking_for"]:
-        lead["remarks"] = f"Caller asked about {lead['looking_for']}."
-    else:
-        lead["remarks"] = "Caller discussed the configured workflow."
-    return lead
-
-
-def build_post_call_payload(
-    workflow_run: Any,
-    *,
-    duration_seconds: int | None = None,
-    logs: dict[str, Any] | None = None,
-    recording_url: str | None = None,
-) -> dict[str, Any]:
-    initial_context = dict(getattr(workflow_run, "initial_context", None) or {})
-    gathered_context = dict(getattr(workflow_run, "gathered_context", None) or {})
-    attrs = _participant_attrs(initial_context)
-    cost_info = dict(getattr(workflow_run, "cost_info", None) or {})
-    logs = logs or dict(getattr(workflow_run, "logs", None) or {})
-
-    lead = extract_lead_details(gathered_context)
-    inferred = infer_lead_details_from_logs(logs)
-    user_text = " ".join(_conversation_texts(logs, "user"))
-    for field in LEAD_FIELDS:
-        if is_missing_lead_value(lead.get(field), lead=lead, field=field):
-            lead[field] = inferred.get(field) or ""
-        elif field in {"district", "town", "customer_name"} and user_text:
-            if not user_evidence_supports_lead_value(field, lead[field], user_text):
-                lead[field] = inferred.get(field) or ""
-        if is_missing_lead_value(lead.get(field), lead=lead, field=field):
-            lead[field] = ""
-
-    recording_state = gathered_context.get("livekit_recording")
-    if isinstance(recording_state, dict):
-        gathered_recording_url = recording_available_url(recording_state)
-    else:
-        gathered_recording_url = ""
-
-    duration = duration_seconds
-    if duration is None:
-        raw_duration = cost_info.get("call_duration_seconds")
-        try:
-            duration = int(raw_duration)
-        except (TypeError, ValueError):
-            duration = 0
-
-    payload = {
-        "customer_number": _first_present(
-            initial_context.get("customer_number"),
-            initial_context.get("caller_number"),
-            attrs.get("sip.phoneNumber"),
-            attrs.get("sip.from"),
-            attrs.get("livekit.sip.phoneNumber"),
-        ),
-        "rep_number": _first_present(
-            initial_context.get("rep_number"),
-            initial_context.get("called_number"),
-            attrs.get("sip.trunkPhoneNumber"),
-            attrs.get("sip.to"),
-            attrs.get("livekit.sip.trunkPhoneNumber"),
-        ),
-        "called_at": _iso_datetime(getattr(workflow_run, "created_at", None)),
-        "duration": duration,
-        "district": lead["district"],
-        "town": lead["town"],
-        "looking_for": lead["looking_for"],
-        "looking for": lead["looking_for"],
-        "customer_name": lead["customer_name"],
-        "remarks": lead["remarks"],
-        "recording_url": _first_present(
-            recording_url,
-            getattr(workflow_run, "recording_url", None),
-            gathered_context.get("recording_url"),
-            gathered_recording_url,
-        ),
-    }
-    return payload
-
-
-async def send_post_call_webhook(
-    payload: dict[str, Any],
-    *,
-    webhook_url: str | None = None,
-) -> dict[str, Any]:
-    url = (webhook_url or post_call_webhook_url()).strip()
-    if not url:
-        return {"status": "disabled"}
-
-    try:
-        async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS) as client:
-            response = await client.post(url, json=payload)
-        ok = 200 <= response.status_code < 300
-        result = {
-            "status": "sent" if ok else "failed",
-            "status_code": response.status_code,
-            "response": response.text[:500],
-        }
-        if ok:
-            logger.info("[LiveKit] post-call webhook sent")
-        else:
-            logger.warning(
-                "[LiveKit] post-call webhook failed "
-                f"status_code={response.status_code} response={response.text[:200]!r}"
-            )
-        return result
-    except Exception as exc:
-        logger.error(f"[LiveKit] post-call webhook error: {exc}")
-        return {"status": "error", "error": str(exc)}
