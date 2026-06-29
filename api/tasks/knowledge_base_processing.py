@@ -201,7 +201,9 @@ async def process_knowledge_base_document(
             chunk_texts.append(contextualized_text)
 
         if not chunk_records:
-            logger.warning(f"Document {document_id}: local processor returned zero chunks")
+            logger.warning(
+                f"Document {document_id}: local processor returned zero chunks"
+            )
             await db_client.update_document_status(
                 document_id,
                 "completed",

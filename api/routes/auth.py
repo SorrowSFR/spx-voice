@@ -51,9 +51,7 @@ async def signup(request: SignupRequest):
     try:
         await ensure_default_user_setup(user)
     except Exception:
-        logger.warning(
-            "Failed to create default setup for OSS user", exc_info=True
-        )
+        logger.warning("Failed to create default setup for OSS user", exc_info=True)
 
     # Create JWT token
     token = create_jwt_token(user.id, request.email)

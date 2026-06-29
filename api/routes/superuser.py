@@ -107,7 +107,7 @@ async def impersonate(
 
     return ImpersonateResponse(
         refresh_token=session["refresh_token"],
-    access_token=session["access_token"],
+        access_token=session["access_token"],
     )
 
 

@@ -508,6 +508,7 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             ThinkingConfig,
             ThinkingLevel,
         )
+
         from pipecat.services.google.gemini_live.llm import GeminiVADParams
 
         thinking_config = (
@@ -632,7 +633,9 @@ def create_realtime_inference_llm_service(user_config):
         return create_llm_service(user_config)
 
     provider = realtime_config.provider
-    provider_value = provider.value if isinstance(provider, ServiceProviders) else provider
+    provider_value = (
+        provider.value if isinstance(provider, ServiceProviders) else provider
+    )
 
     if provider_value == ServiceProviders.GOOGLE_REALTIME.value:
         return create_llm_service_from_provider(

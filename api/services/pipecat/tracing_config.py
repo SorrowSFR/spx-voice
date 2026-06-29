@@ -103,7 +103,9 @@ class _OrgRoutingExporter(SpanExporter):
             if scope is not None and scope.name == "fastmcp":
                 continue
 
-            org_id = span.attributes.get("spx_voice.org_id") if span.attributes else None
+            org_id = (
+                span.attributes.get("spx_voice.org_id") if span.attributes else None
+            )
             if org_id and str(org_id) in self._org_exporters:
                 org_buckets.setdefault(str(org_id), []).append(span)
             else:

@@ -1,7 +1,7 @@
 'use client';
 
 import { addDays, format, subDays } from 'date-fns';
-import { Calendar, ChevronLeft, ChevronRight, Download, BarChart3, Filter } from 'lucide-react';
+import { BarChart3, Calendar, ChevronLeft, ChevronRight, Download, Filter } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
@@ -12,7 +12,7 @@ import {
 import type { WorkflowRunDetail } from '@/client/types.gen';
 import { Button } from '@/components/ui/button';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';

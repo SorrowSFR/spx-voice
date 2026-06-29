@@ -13,6 +13,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { TemplateGalleryDialog } from '@/components/workflow/TemplateGalleryDialog';
 import { useAppConfig } from '@/context/AppConfigContext';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
@@ -50,6 +51,7 @@ export function CreateWorkflowButton() {
     const { user, getAccessToken } = useAuth();
     const { config } = useAppConfig();
     const [isCreating, setIsCreating] = useState(false);
+    const [templatesOpen, setTemplatesOpen] = useState(false);
     const hostedServicesEnabled = Boolean(config?.hostedServicesEnabled);
 
     const handleAgentBuilder = () => {
@@ -85,32 +87,43 @@ export function CreateWorkflowButton() {
     };
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button disabled={isCreating}>
-                    <PlusIcon className="w-4 h-4" />
-                    {isCreating ? 'Creating...' : 'Create Agent'}
-                    <ChevronDown className="w-4 h-4" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                {hostedServicesEnabled && (
-                    <DropdownMenuItem onClick={handleAgentBuilder} className="cursor-pointer">
-                        <Bot className="w-4 h-4 mr-2" />
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button disabled={isCreating}>
+                        <PlusIcon className="w-4 h-4" />
+                        {isCreating ? 'Creating...' : 'Create Agent'}
+                        <ChevronDown className="w-4 h-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setTemplatesOpen(true)} className="cursor-pointer">
+                        <LayoutTemplate className="w-4 h-4 mr-2" />
                         <div>
-                            <div className="font-medium">Use Agent Builder</div>
-                            <div className="text-xs text-muted-foreground">AI generates a workflow from your description</div>
+                            <div className="font-medium">Start from a Template</div>
+                            <div className="text-xs text-muted-foreground">Pick a ready-made agent and customize it</div>
                         </div>
                     </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={handleBlankCanvas} disabled={isCreating} className="cursor-pointer">
-                    <LayoutTemplate className="w-4 h-4 mr-2" />
-                    <div>
-                        <div className="font-medium">Blank Canvas</div>
-                        <div className="text-xs text-muted-foreground">Start from scratch with an empty workflow</div>
-                    </div>
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+                    {hostedServicesEnabled && (
+                        <DropdownMenuItem onClick={handleAgentBuilder} className="cursor-pointer">
+                            <Bot className="w-4 h-4 mr-2" />
+                            <div>
+                                <div className="font-medium">Use Agent Builder</div>
+                                <div className="text-xs text-muted-foreground">AI generates a workflow from your description</div>
+                            </div>
+                        </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={handleBlankCanvas} disabled={isCreating} className="cursor-pointer">
+                        <PlusIcon className="w-4 h-4 mr-2" />
+                        <div>
+                            <div className="font-medium">Blank Canvas</div>
+                            <div className="text-xs text-muted-foreground">Start from scratch with an empty workflow</div>
+                        </div>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <TemplateGalleryDialog open={templatesOpen} onOpenChange={setTemplatesOpen} />
+        </>
     );
 }

@@ -6,17 +6,22 @@ from datetime import timedelta
 from typing import Any
 
 from google.protobuf.duration_pb2 import Duration
-from livekit import api as livekit_api
-from livekit.api import TwirpError, TwirpErrorCode
 from loguru import logger
 
 from api.services.livekit.runtime_config import (
     effective_livekit_settings,
+)
+from api.services.livekit.runtime_config import (
     is_livekit_runtime as _is_livekit_runtime,
+)
+from api.services.livekit.runtime_config import (
     is_pipecat_runtime as _is_pipecat_runtime,
+)
+from api.services.livekit.runtime_config import (
     livekit_configured as _livekit_configured,
 )
-
+from livekit import api as livekit_api
+from livekit.api import TwirpError, TwirpErrorCode
 
 LIVEKIT_RUNTIME = "livekit"
 PIPECAT_RUNTIME = "pipecat"
@@ -122,14 +127,14 @@ def _json_metadata(metadata: dict[str, Any]) -> str:
     return json.dumps(metadata, separators=(",", ":"), default=str)
 
 
-def _new_access_token(identity: str, *, name: str | None = None) -> livekit_api.AccessToken:
+def _new_access_token(
+    identity: str, *, name: str | None = None
+) -> livekit_api.AccessToken:
     require_livekit_configured()
     settings = effective_livekit_settings()
     token = livekit_api.AccessToken(
         settings.livekit_api_key, settings.livekit_api_secret
-    ).with_identity(
-        identity
-    )
+    ).with_identity(identity)
     if name:
         token = token.with_name(name)
     return token.with_ttl(timedelta(seconds=settings.livekit_token_ttl_seconds))

@@ -12,7 +12,10 @@ def test_app_url_wins_over_other_values():
         "SERVICE_URL_UI_3010": "https://generated.example.com:3010",
     }
 
-    assert resolve_public_url("BACKEND_API_ENDPOINT", env=env) == "https://voice.example.com"
+    assert (
+        resolve_public_url("BACKEND_API_ENDPOINT", env=env)
+        == "https://voice.example.com"
+    )
 
 
 def test_explicit_non_local_url_wins_over_coolify_generated_url():
@@ -21,7 +24,10 @@ def test_explicit_non_local_url_wins_over_coolify_generated_url():
         "SERVICE_URL_UI_3010": "https://generated.example.com:3010",
     }
 
-    assert resolve_public_url("BACKEND_API_ENDPOINT", env=env) == "https://custom.example.com"
+    assert (
+        resolve_public_url("BACKEND_API_ENDPOINT", env=env)
+        == "https://custom.example.com"
+    )
 
 
 def test_coolify_generated_url_replaces_localhost_compose_fallback():
@@ -30,7 +36,10 @@ def test_coolify_generated_url_replaces_localhost_compose_fallback():
         "SERVICE_URL_UI_3010": "https://web-ui.spxai.cloud:3010",
     }
 
-    assert resolve_public_url("BACKEND_API_ENDPOINT", env=env) == "https://web-ui.spxai.cloud"
+    assert (
+        resolve_public_url("BACKEND_API_ENDPOINT", env=env)
+        == "https://web-ui.spxai.cloud"
+    )
 
 
 def test_coolify_generated_fqdn_gets_scheme_and_strips_internal_port():
@@ -42,15 +51,22 @@ def test_coolify_generated_fqdn_gets_scheme_and_strips_internal_port():
 def test_localhost_is_kept_when_no_coolify_url_exists():
     env = {"BACKEND_API_ENDPOINT": "http://localhost:3010"}
 
-    assert resolve_public_url("BACKEND_API_ENDPOINT", env=env) == "http://localhost:3010"
+    assert (
+        resolve_public_url("BACKEND_API_ENDPOINT", env=env) == "http://localhost:3010"
+    )
 
 
 def test_default_used_when_no_values_exist():
     assert (
-        resolve_public_url("BACKEND_API_ENDPOINT", env={}, default="http://localhost:8000")
+        resolve_public_url(
+            "BACKEND_API_ENDPOINT", env={}, default="http://localhost:8000"
+        )
         == "http://localhost:8000"
     )
 
 
 def test_normalize_public_url_keeps_explicit_non_default_port():
-    assert normalize_public_url("https://voice.example.com:8443") == "https://voice.example.com:8443"
+    assert (
+        normalize_public_url("https://voice.example.com:8443")
+        == "https://voice.example.com:8443"
+    )

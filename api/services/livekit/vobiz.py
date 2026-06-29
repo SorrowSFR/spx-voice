@@ -10,8 +10,6 @@ from urllib.parse import quote
 
 import aiohttp
 from fastapi import HTTPException
-from livekit import api as livekit_api
-from livekit.api import TwirpError, TwirpErrorCode
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 
@@ -23,6 +21,8 @@ from api.services.livekit.client import (
     room_prefix_for_workflow,
 )
 from api.services.livekit.runtime_config import effective_livekit_settings
+from livekit import api as livekit_api
+from livekit.api import TwirpError, TwirpErrorCode
 
 VOBIZ_API_BASE_URL = "https://api.vobiz.ai/api"
 
@@ -302,8 +302,7 @@ def _vobiz_probe_error_detail(exc: HTTPException) -> str:
         )
     if status == 404:
         return (
-            "Vobiz account not found (HTTP 404). Check that the account ID is "
-            "correct."
+            "Vobiz account not found (HTTP 404). Check that the account ID is correct."
         )
     detail = str(getattr(exc, "detail", exc))
     if "Failed to reach Vobiz API" in detail:

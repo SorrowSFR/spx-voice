@@ -31,19 +31,18 @@ from typing import Optional
 
 import pytest
 from pipecat.frames.frames import TranscriptionFrame
+from pipecat.tests import MockLLMService, MockTTSService
 from pipecat.tests.mock_transport import MockTransport
 from pipecat.transports.base_transport import TransportParams
 from pipecat.utils.time import time_now_iso8601
 
-from api.enums import WorkflowRunMode, WorkflowRunState
+from api.enums import WorkflowRunMode
 from api.services.pipecat.audio_config import create_audio_config
 from api.services.pipecat.run_pipeline import _run_pipeline
 from api.tests.integrations._run_pipeline_helpers import (
     create_workflow_run_rows,
     patch_run_pipeline_externals,
 )
-from pipecat.tests import MockLLMService, MockTTSService
-
 
 # =============================================================================
 # Test Workflow Definition - Rural Document Collection
@@ -67,8 +66,7 @@ RURAL_DOCUMENT_COLLECTION_WORKFLOW = {
                 "add_global_prompt": True,
                 "greeting_type": "text",
                 "greeting": (
-                    "Namaskar. Aapka swagat hai. "
-                    "Kya aapke paas Aadhaar card hai?"
+                    "Namaskar. Aapka swagat hai. Kya aapke paas Aadhaar card hai?"
                 ),
             },
         },
@@ -190,6 +188,7 @@ TEST_HARD_TIMEOUT_SECONDS = 60.0
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 async def rural_document_workflow_setup(db_session, async_session):
     """Create org/user/user_configuration/workflow/workflow_run rows for
@@ -206,6 +205,7 @@ async def rural_document_workflow_setup(db_session, async_session):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def create_hindi_transcription(text: str) -> TranscriptionFrame:
     """Create a TranscriptionFrame simulating Hindi speech input."""
@@ -251,6 +251,7 @@ async def wait_for_condition(
 # =============================================================================
 # E2E Test Body
 # =============================================================================
+
 
 async def run_rural_document_collection_test(
     workflow_run_setup,
@@ -355,9 +356,7 @@ async def run_rural_document_collection_test(
             await asyncio.sleep(0.5)
 
             # Send "haan" (yes) response - simulating rural caller speaking in Hindi
-            await pipeline_task.queue_frame(
-                create_hindi_transcription("haan")
-            )
+            await pipeline_task.queue_frame(create_hindi_transcription("haan"))
             conversation_transcripts.append("haan")
             results["steps_completed"].append("User confirmed Aadhaar with 'haan'")
 
@@ -366,9 +365,7 @@ async def run_rural_document_collection_test(
 
             # Step 2: Send another "haan" confirming documents are ready
             # Bot should have listed: 1. Aadhaar card, 2. Electricity bill, 3. Bank account with IFSC
-            await pipeline_task.queue_frame(
-                create_hindi_transcription("haan")
-            )
+            await pipeline_task.queue_frame(create_hindi_transcription("haan"))
             conversation_transcripts.append("haan")
             results["steps_completed"].append("User confirmed documents with 'haan'")
 
@@ -395,10 +392,12 @@ async def run_rural_document_collection_test(
         )
         assert "End Call" in nodes_visited, "End Call node should have been visited"
 
-        results["steps_completed"].extend([
-            "Workflow completed successfully",
-            f"Nodes visited: {nodes_visited}",
-        ])
+        results["steps_completed"].extend(
+            [
+                "Workflow completed successfully",
+                f"Nodes visited: {nodes_visited}",
+            ]
+        )
 
         # Verify extraction captured the conversation outcomes
         extracted = refreshed.gathered_context
@@ -431,6 +430,7 @@ async def run_rural_document_collection_test(
 # =============================================================================
 # Test Cases
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_sc_rural_02_rural_caller_document_collection_hindi_haan(
@@ -477,14 +477,12 @@ async def test_sc_rural_02_rural_caller_document_collection_hindi_haan(
     print(f"Success: {results['success']}")
     print(f"Steps Completed: {results['steps_completed']}")
     print(f"Extracted Variables: {results['extracted_variables']}")
-    if results['errors']:
+    if results["errors"]:
         print(f"Errors: {results['errors']}")
     print("=" * 60)
 
     # Final assertions
-    assert results["success"], (
-        f"Test failed. Errors: {results['errors']}"
-    )
+    assert results["success"], f"Test failed. Errors: {results['errors']}"
     assert "Workflow completed successfully" in results["steps_completed"], (
         "Workflow should have completed"
     )
@@ -496,6 +494,7 @@ async def test_sc_rural_02_rural_caller_document_collection_hindi_haan(
 # =============================================================================
 # Additional Test Cases for Edge Scenarios
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_sc_rural_02_handles_nahin_response(
@@ -562,9 +561,7 @@ async def test_sc_rural_02_handles_nahin_response(
             )
 
             # Send "nahin" response
-            await pipeline_task.queue_frame(
-                create_hindi_transcription("nahin")
-            )
+            await pipeline_task.queue_frame(create_hindi_transcription("nahin"))
 
             # Wait for run to complete
             await asyncio.wait_for(run_task, timeout=30.0)
@@ -646,13 +643,9 @@ async def test_sc_rural_02_handles_poor_network_audio_quality(
 
             # Simulate fragmented "haan" - might arrive as "ha" then "an"
             # due to poor network conditions
-            await pipeline_task.queue_frame(
-                create_hindi_transcription("ha")
-            )
+            await pipeline_task.queue_frame(create_hindi_transcription("ha"))
             await asyncio.sleep(0.1)
-            await pipeline_task.queue_frame(
-                create_hindi_transcription("an")
-            )
+            await pipeline_task.queue_frame(create_hindi_transcription("an"))
 
             # Wait for run to complete
             await asyncio.wait_for(run_task, timeout=30.0)

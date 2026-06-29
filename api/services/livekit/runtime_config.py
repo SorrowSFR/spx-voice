@@ -160,7 +160,9 @@ def livekit_configured() -> bool:
     return effective_livekit_settings().configured
 
 
-def livekit_environment(settings: LiveKitRuntimeSettings | None = None) -> dict[str, str]:
+def livekit_environment(
+    settings: LiveKitRuntimeSettings | None = None,
+) -> dict[str, str]:
     settings = settings or effective_livekit_settings()
     env = os.environ.copy()
     env.update(
@@ -224,12 +226,8 @@ def _settings_from_dict(
         livekit_client_url=str(data.get("livekit_client_url") or "").strip(),
         livekit_api_key=str(data.get("livekit_api_key") or "").strip(),
         livekit_api_secret=str(data.get("livekit_api_secret") or "").strip(),
-        livekit_agent_name=str(
-            data.get("livekit_agent_name") or "spx-voice"
-        ).strip(),
-        livekit_room_prefix=str(
-            data.get("livekit_room_prefix") or "spx-voice"
-        ).strip(),
+        livekit_agent_name=str(data.get("livekit_agent_name") or "spx-voice").strip(),
+        livekit_room_prefix=str(data.get("livekit_room_prefix") or "spx-voice").strip(),
         livekit_token_ttl_seconds=_positive_int(
             data.get("livekit_token_ttl_seconds"), 3600
         ),

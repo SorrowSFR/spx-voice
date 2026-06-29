@@ -29,7 +29,6 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from api.utils.run_context import set_current_org_id
 
 from api.db import db_client
 from api.enums import WorkflowRunMode, WorkflowRunState
@@ -49,6 +48,7 @@ from api.services.pipecat.tracing_config import (
 from api.services.workflow.dto import ReactFlowDTO
 from api.services.workflow.pipecat_engine import PipecatEngine
 from api.services.workflow.workflow_graph import WorkflowGraph
+from api.utils.run_context import set_current_org_id
 
 TEXT_CHAT_CHECKPOINT_VERSION = 1
 TEXT_CHAT_TURN_TIMEOUT_SECONDS = 60.0

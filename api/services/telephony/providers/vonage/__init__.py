@@ -11,6 +11,8 @@ from api.services.telephony.registry import (
 
 from .config import VonageConfigurationRequest, VonageConfigurationResponse
 from .provider import VonageProvider
+
+
 async def create_transport(*args, **kwargs):
     from .transport import create_transport as _create_transport
 
@@ -85,4 +87,3 @@ __all__ = [
     "VonageProvider",
     "create_transport",
 ]
-

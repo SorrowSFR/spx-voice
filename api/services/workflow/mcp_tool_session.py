@@ -16,15 +16,18 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from loguru import logger
 from mcp.client.session_group import StreamableHttpParameters
+
 try:
     from pipecat.adapters.schemas.function_schema import FunctionSchema
 except ModuleNotFoundError:
+
     @dataclass
     class FunctionSchema:
         name: str
         description: str
         properties: dict[str, Any]
         required: list[str]
+
 
 from api.services.workflow.tools.mcp_tool import namespace_function_name
 from api.utils.credential_auth import build_auth_header

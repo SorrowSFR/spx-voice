@@ -10,12 +10,14 @@ from typing import TYPE_CHECKING, Callable, Optional
 try:
     from pipecat.adapters.schemas.function_schema import FunctionSchema
 except ModuleNotFoundError:
+
     @dataclass
     class FunctionSchema:
         name: str
         description: str
         properties: dict[str, object]
         required: list[str]
+
 
 if TYPE_CHECKING:
     from api.services.workflow.pipecat_engine_custom_tools import CustomToolManager

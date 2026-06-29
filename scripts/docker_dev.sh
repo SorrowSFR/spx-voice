@@ -47,11 +47,14 @@ case "${COMMAND}" in
     ensure_env_file .env.example .env
     ensure_env_file api/.env.example api/.env
     ensure_env_file ui/.env.example ui/.env
-    docker "${COMPOSE_ARGS[@]}" up -d --pull missing
+    # `up` pulls the public images and builds the API image locally from
+    # api/Dockerfile on first run when no published image is available. The
+    # first build can take a few minutes; later starts reuse the built image.
+    docker "${COMPOSE_ARGS[@]}" up -d
     print_next_steps
     ;;
   rebuild)
-    docker "${COMPOSE_ARGS[@]}" pull api ui
+    docker "${COMPOSE_ARGS[@]}" build api
     docker "${COMPOSE_ARGS[@]}" up -d --force-recreate api ui
     print_next_steps
     ;;

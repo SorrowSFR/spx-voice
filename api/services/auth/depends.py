@@ -309,11 +309,7 @@ async def create_default_user_configuration(
 
 def _has_any_model_configuration(config: UserConfiguration) -> bool:
     return bool(
-        config.llm
-        or config.tts
-        or config.stt
-        or config.embeddings
-        or config.realtime
+        config.llm or config.tts or config.stt or config.embeddings or config.realtime
     )
 
 

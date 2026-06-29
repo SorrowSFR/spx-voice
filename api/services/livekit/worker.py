@@ -13,21 +13,18 @@ from typing import Any
 
 from google import genai
 from google.genai import types as genai_types
-from livekit import agents, rtc
-from livekit.agents import Agent, AgentSession, JobContext, cli, llm
-from livekit.plugins import google, openai, silero
 from loguru import logger
 
 from api.db import db_client
 from api.enums import CallType, WorkflowRunMode, WorkflowRunState
+from api.services.configuration.registry import ServiceProviders
+from api.services.configuration.resolve import resolve_effective_config
+from api.services.gen_ai import resolve_embedding_settings
+from api.services.livekit import post_call
 from api.services.livekit.runtime_config import (
     effective_livekit_settings,
     livekit_environment,
 )
-from api.services.livekit import post_call
-from api.services.configuration.registry import ServiceProviders
-from api.services.configuration.resolve import resolve_effective_config
-from api.services.gen_ai import resolve_embedding_settings
 from api.services.workflow.dto import ReactFlowDTO
 from api.services.workflow.pipecat_engine_context_composer import (
     compose_system_prompt_for_node,
@@ -38,11 +35,12 @@ from api.services.workflow.tools.knowledge_base import (
 )
 from api.services.workflow.workflow_graph import Edge, Node, WorkflowGraph
 from api.utils.template_renderer import render_template
+from livekit import agents, rtc
+from livekit.agents import Agent, AgentSession, JobContext, cli, llm
+from livekit.plugins import google, openai, silero
 
 FEEDBACK_TOPIC = "spx-voice.feedback"
-DEFAULT_OPENING = (
-    "Hello, this is your SPX Voice assistant. How can I help you today?"
-)
+DEFAULT_OPENING = "Hello, this is your SPX Voice assistant. How can I help you today?"
 OPENING_AUDIO_CACHE_DIR = (
     Path(__file__).resolve().parents[2] / ".runtime" / "livekit_openings"
 )
@@ -461,8 +459,7 @@ async def _generate_live_opening_audio(
     duration_seconds = len(audio) / (24000 * 2)
     if not audio or duration_seconds > max_duration_seconds:
         raise RuntimeError(
-            "Generated opening audio was empty or too long "
-            f"({duration_seconds:.2f}s)"
+            f"Generated opening audio was empty or too long ({duration_seconds:.2f}s)"
         )
     _write_pcm_wav(
         output_path,
@@ -683,9 +680,7 @@ def _google_thinking_config(model: str) -> dict[str, Any] | None:
 # replaces a brittle ``"3.1" in model_name`` substring check that would also
 # misclassify unrelated names (e.g. a future ``gemini-3.10``). Add a model here
 # only when it genuinely lacks generate_reply support.
-_REALTIME_GENERATE_REPLY_UNSUPPORTED_PREFIXES = (
-    "gemini-3.1-flash-live",
-)
+_REALTIME_GENERATE_REPLY_UNSUPPORTED_PREFIXES = ("gemini-3.1-flash-live",)
 
 
 def _supports_realtime_generate_reply(provider: str | None, model: str | None) -> bool:
@@ -1553,7 +1548,7 @@ def _register_feedback_handlers(
         if not text:
             return
         logger.info(
-            "[LiveKit] assistant text " f"run_id={agent._workflow_run_id} text={text!r}"
+            f"[LiveKit] assistant text run_id={agent._workflow_run_id} text={text!r}"
         )
         metrics = _message_metrics_payload(item)
         if agent._last_final_transcript_at is not None:
@@ -1947,9 +1942,7 @@ async def entrypoint(ctx: JobContext) -> None:
     realtime_model = None
     try:
         workflow_run_task = asyncio.create_task(
-            db_client.get_workflow_run(
-                workflow_run_id, organization_id=organization_id
-            )
+            db_client.get_workflow_run(workflow_run_id, organization_id=organization_id)
         )
         workflow_task = asyncio.create_task(
             db_client.get_workflow(workflow_id, organization_id=organization_id)

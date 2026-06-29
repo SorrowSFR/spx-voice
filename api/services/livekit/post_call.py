@@ -12,7 +12,6 @@ from loguru import logger
 
 from api.services.livekit.runtime_config import effective_livekit_settings
 
-
 RECORDINGS_S3_ENDPOINT_ENV = "SPX_VOICE_RECORDINGS_S3_ENDPOINT_URL"
 RECORDINGS_S3_BUCKET_ENV = "SPX_VOICE_RECORDINGS_S3_BUCKET"
 RECORDINGS_S3_ACCESS_KEY_ENV = "SPX_VOICE_RECORDINGS_S3_ACCESS_KEY_ID"
@@ -94,12 +93,12 @@ def _recording_config_from_env() -> _RecordingConfig | None:
         or DEFAULT_RECORDING_REGION,
         force_path_style=_truthy_env(RECORDINGS_S3_FORCE_PATH_STYLE_ENV, default=False),
         public_base_url=(
-            _env_first(RECORDINGS_PUBLIC_BASE_ENV).rstrip("/")
-            or endpoint_url
+            _env_first(RECORDINGS_PUBLIC_BASE_ENV).rstrip("/") or endpoint_url
         ),
         key_prefix=(
-            _env_first(RECORDINGS_KEY_PREFIX_ENV, default=DEFAULT_RECORDING_PREFIX)
-            .strip("/")
+            _env_first(
+                RECORDINGS_KEY_PREFIX_ENV, default=DEFAULT_RECORDING_PREFIX
+            ).strip("/")
             or DEFAULT_RECORDING_PREFIX
         ),
     )
@@ -122,8 +121,9 @@ def _public_recording_url(config: _RecordingConfig, key: str) -> str:
 
 def _recording_key_prefix() -> str:
     return (
-        _env_first(RECORDINGS_KEY_PREFIX_ENV, default=DEFAULT_RECORDING_PREFIX)
-        .strip("/")
+        _env_first(RECORDINGS_KEY_PREFIX_ENV, default=DEFAULT_RECORDING_PREFIX).strip(
+            "/"
+        )
         or DEFAULT_RECORDING_PREFIX
     )
 
@@ -172,8 +172,8 @@ async def generate_recording_signed_url(
     if not key or config is None:
         return None
 
-    from botocore.config import Config
     import aioboto3
+    from botocore.config import Config
 
     response_params: dict[str, str] = {}
     if force_inline:
@@ -313,7 +313,9 @@ async def start_livekit_room_recording(
 
     settings = effective_livekit_settings()
     if not settings.configured:
-        logger.warning("[LiveKit] recording requested but LiveKit API is not configured")
+        logger.warning(
+            "[LiveKit] recording requested but LiveKit API is not configured"
+        )
         return LiveKitRecordingState(
             egress_id="",
             recording_key="",
@@ -440,8 +442,7 @@ async def stop_livekit_room_recording(
                     )
             except Exception as list_exc:
                 logger.warning(
-                    "[LiveKit] failed to inspect completed room recording: "
-                    f"{list_exc}"
+                    f"[LiveKit] failed to inspect completed room recording: {list_exc}"
                 )
         logger.warning(f"[LiveKit] failed to stop room recording: {exc}")
         return LiveKitRecordingState(

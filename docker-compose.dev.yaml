@@ -1,6 +1,12 @@
 services:
   api:
     image: ${REGISTRY:-spxvoice}/spx-voice-api:latest
+    # Build the API image locally from the bundled Dockerfile when the published
+    # image is not available (the default for a self-hosted clone). Compose uses
+    # the local/registry image if present, and builds from here otherwise.
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     command: >
       bash -lc "python -m pip install --no-cache-dir
       pypdf==6.12.1
@@ -12,7 +18,6 @@ services:
       python -m alembic -c /app/api/alembic.ini upgrade head &&
       (python -m arq api.tasks.arq.WorkerSettings --custom-log-dict api.tasks.arq.LOG_CONFIG &) &&
       python -m uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload --reload-dir api"
-    pull_policy: missing
     volumes:
       - ./api:/app/api
       - api_runtime:/app/api/.runtime

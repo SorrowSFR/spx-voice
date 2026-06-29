@@ -39,6 +39,7 @@ from api.services.pipecat.realtime_feedback_events import (
 if TYPE_CHECKING:
     from api.services.pipecat.in_memory_buffers import InMemoryLogsBuffer
 
+from api.utils.runtime_enums import RealtimeFeedbackType
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
@@ -60,7 +61,6 @@ from pipecat.frames.frames import (
 from pipecat.metrics.metrics import TTFBMetricsData
 from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection
-from api.utils.runtime_enums import RealtimeFeedbackType
 from pipecat.utils.time import nanoseconds_to_seconds
 
 

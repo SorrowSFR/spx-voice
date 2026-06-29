@@ -1,6 +1,5 @@
 from contextvars import ContextVar
 
-
 run_id_var: ContextVar[int | None] = ContextVar("run_id", default=None)
 org_id_var: ContextVar[int | None] = ContextVar("org_id", default=None)
 turn_var: ContextVar[str | None] = ContextVar("turn", default=None)

@@ -37,7 +37,9 @@ class MPSServiceKeyClient:
         """
         require_dograh_cloud("Dograh managed platform service calls")
         if not self.base_url:
-            raise RuntimeError("MPS_API_URL must be set when Dograh cloud calls are enabled")
+            raise RuntimeError(
+                "MPS_API_URL must be set when Dograh cloud calls are enabled"
+            )
 
         headers = {"Content-Type": "application/json"}
 

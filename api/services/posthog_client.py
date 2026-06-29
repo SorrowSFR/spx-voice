@@ -9,7 +9,12 @@ _posthog_client: Posthog | None = None
 def get_posthog() -> Posthog | None:
     """Return the lazily-initialised PostHog client, or None if not configured."""
     global _posthog_client
-    if _posthog_client is None and POSTHOG_API_KEY and POSTHOG_HOST and ENABLE_TELEMETRY:
+    if (
+        _posthog_client is None
+        and POSTHOG_API_KEY
+        and POSTHOG_HOST
+        and ENABLE_TELEMETRY
+    ):
         _posthog_client = Posthog(POSTHOG_API_KEY, host=POSTHOG_HOST)
     return _posthog_client
 

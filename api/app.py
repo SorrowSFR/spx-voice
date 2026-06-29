@@ -12,19 +12,20 @@ from loguru import logger
 from api.constants import REDIS_URL
 from api.mcp_server import mcp
 from api.routes.main import router as main_router
-from api.services.pipecat.tracing_config import (
-    handle_langfuse_sync,
-    load_all_org_langfuse_credentials,
-)
 from api.services.livekit.worker_process import (
     apply_livekit_worker_settings,
     stop_livekit_worker,
+)
+from api.services.pipecat.tracing_config import (
+    handle_langfuse_sync,
+    load_all_org_langfuse_credentials,
 )
 from api.services.worker_sync.manager import (
     WorkerSyncManager,
     set_worker_sync_manager,
 )
 from api.services.worker_sync.protocol import WorkerSyncEventType
+from api.services.workflow.templates import ensure_default_workflow_templates
 from api.tasks.arq import get_arq_redis
 
 API_PREFIX = "/api/v1"
@@ -50,6 +51,13 @@ async def lifespan(app: FastAPI):
         await sync_manager.start()
         set_worker_sync_manager(sync_manager)
         apply_livekit_worker_settings()
+
+        # Seed the built-in starter templates so the "Create Agent" picker is
+        # never empty on a fresh install. Idempotent and best-effort.
+        try:
+            await ensure_default_workflow_templates()
+        except Exception as exc:
+            logger.warning(f"Workflow template seeding skipped: {exc}")
 
         yield  # Run app
 
