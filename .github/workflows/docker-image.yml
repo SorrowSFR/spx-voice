@@ -18,8 +18,8 @@ jobs:
     strategy:
       matrix:
         service:
-          - "SPX Voice-api|api/Dockerfile|."
-          - "SPX Voice-ui|ui/Dockerfile|."
+          - "spx-voice-api|api/Dockerfile|."
+          - "spx-voice-ui|ui/Dockerfile|."
 
     steps:
       - name: Free Disk Space
@@ -66,7 +66,7 @@ jobs:
 
           # Get version from release tag (removes 'SPX Voice-' and 'v' prefixes if present)
           VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#SPX Voice-}"
+          VERSION="${VERSION#spx-voice-}"
           VERSION="${VERSION#v}"
 
           echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT

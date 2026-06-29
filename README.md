@@ -1,140 +1,184 @@
 # SPX Voice
 
 SPX Voice is an open-source voice AI platform for building and deploying
-conversational agents with Pipecat, LiveKit, telephony, WebRTC, and a
-workflow-builder dashboard.
+conversational voice agents with a visual workflow builder, telephony, and
+WebRTC — self-hosted, with your own API keys.
 
-Base application version: `1.31.0`
-
-This edition keeps the FastAPI backend, Next.js dashboard, workflow builder,
-Postgres/Redis/MinIO storage stack, and self-hosted deployment model, then adds
-the LiveKit voice runtime and Vobiz SIP provisioning flow used by this branch.
-
-SPX Voice intentionally keeps some upstream upstream-compatible internals so
-future security fixes and feature updates can be imported without a painful
-rewrite. See `docs/developer/upstream-compatibility.md` before doing
-large renames or upstream merges.
+It ships a FastAPI backend, a Next.js dashboard with a node-based workflow
+editor, an ARQ worker, and a Postgres / Redis / MinIO storage stack. The default
+voice runtime is **LiveKit with Google Gemini realtime (speech-to-speech)**;
+traditional STT → LLM → TTS pipelines and Vobiz SIP telephony are also supported.
 
 ## What Is Included
 
-- Next.js dashboard for creating and running voice-agent workflows.
-- FastAPI backend with async SQLAlchemy, ARQ workers, Redis, Postgres, and MinIO.
-- Local email/password auth with first-user bootstrap superadmin.
-- Single-organization mode enabled by default for one-business deployments.
-- Pipecat runtime as the default voice runtime.
-- Optional LiveKit runtime for browser voice tests and SIP calls.
-- Vobiz telephony configuration and LiveKit SIP setup helpers.
+- Next.js dashboard with a drag-and-drop workflow editor for voice agents.
+- Pre-built starter templates so you can create a working agent in one click.
+- FastAPI backend with async SQLAlchemy, an ARQ worker, Redis, Postgres, and MinIO.
+- Local email/password auth — the first signup becomes the admin.
+- Single-organization mode by default for one-business deployments.
+- **LiveKit + Gemini realtime** as the default voice runtime; OpenAI realtime and
+  an OpenAI STT/LLM/TTS pipeline are also supported.
+- Vobiz telephony + LiveKit SIP provisioning with a guided setup wizard.
 - Hosted cloud services and telemetry disabled by default.
 
-## Quick Install
+---
 
-Use this path when you want to run this exact checkout with Docker. It mounts
-the local `api/` and `ui/` source into containers, so local changes are the code
-that runs.
+## 1. Prerequisites
 
-### Requirements
+You need **Docker** (with Compose v2) and **Git**. Everything else runs in
+containers.
 
-- Docker Desktop or Docker Engine with Docker Compose v2.
-- Git.
-- Free local ports: `3010`, `8000`, `5432`, `6379`, `9000`, `9001`, and `2000`.
+Free these local ports before starting: `3010`, `8000`, `5432`, `6379`, `9000`,
+`9001`, `2000`.
 
-### Start The Stack
+### macOS
+
+1. Install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/)
+   (choose the Apple Silicon or Intel build for your machine), or with Homebrew:
+   ```bash
+   brew install --cask docker
+   ```
+2. Launch Docker Desktop and wait until it reports **Running**.
+3. Verify in Terminal:
+   ```bash
+   docker compose version
+   ```
+
+### Windows
+
+1. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)
+   and enable the **WSL 2** backend when prompted (recommended).
+2. Launch Docker Desktop and wait until it reports **Running**.
+3. Use **PowerShell** (not Command Prompt). Verify:
+   ```powershell
+   docker compose version
+   ```
+4. If running `.\start.ps1` is blocked by the execution policy, allow it for the
+   current session only:
+   ```powershell
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+   ```
+
+### Linux
+
+1. Install Docker Engine and the Compose plugin from
+   [docs.docker.com](https://docs.docker.com/engine/install/).
+2. Verify:
+   ```bash
+   docker compose version
+   ```
+
+---
+
+## 2. Quick Start
+
+This runs the exact checkout with Docker. It bind-mounts the local `api/` and
+`ui/` source into containers, so local edits are the code that runs.
+
+**macOS / Linux:**
 
 ```bash
 git clone <this-repository-url>
-cd <repo-directory>
+cd spx-voice
 bash start.sh
 ```
 
-PowerShell:
+**Windows (PowerShell):**
 
 ```powershell
 git clone <this-repository-url>
-cd <repo-directory>
+cd spx-voice
 .\start.ps1
 ```
 
-The launcher checks for Docker Compose v2, initializes submodules, creates
-`.env`, `api/.env`, and `ui/.env` from their examples when missing, then starts
-the Docker Compose stack.
+The launcher checks Docker, initializes submodules, creates `.env`, `api/.env`,
+and `ui/.env` from their examples when missing, then starts the stack.
+
+> **First run builds the API image locally** from `api/Dockerfile` (no published
+> image is required). This can take a few minutes and downloads dependencies;
+> later starts reuse the built image and come up in seconds.
 
 If you prefer the raw Compose command:
 
 ```bash
-docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d --pull missing
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
 ```
 
-Open the app:
+When it's up, open:
 
-- Dashboard: http://localhost:3010
-- API health: http://localhost:8000/api/v1/health
-- MinIO console: http://localhost:9001
+- **Dashboard:** http://localhost:3010
+- **API health:** http://localhost:8000/api/v1/health
+- **MinIO console:** http://localhost:9001 (`minioadmin` / `minioadmin`)
 
-The first signup creates the bootstrap superadmin account. After that, public
-signup is disabled unless `ALLOW_PUBLIC_SIGNUP=true` is set.
+---
 
-## Coolify Deployment
+## 3. First Run — Create Your First Agent
 
-For production, the recommended path is Coolify with the dedicated compose file:
+1. **Create the admin account.** Open http://localhost:3010 and sign up. The
+   first signup becomes the admin; public signup is then disabled unless you set
+   `ALLOW_PUBLIC_SIGNUP=true`.
 
-```text
-docker-compose.coolify.yaml
-```
+2. **Add a model API key.** SPX Voice is Gemini-realtime first. Get a free key
+   from [Google AI Studio](https://aistudio.google.com/app/apikey), then either:
+   - **Easiest:** add it to `.env` *before* the first start so the agent is
+     auto-configured:
+     ```env
+     GEMINI_API_KEY=your-google-ai-studio-key
+     ```
+     (then run `start.sh` / `start.ps1`), **or**
+   - add it in the dashboard under **Model Configurations** → keep *Realtime
+     Mode* on → choose the Google Gemini realtime provider → paste the key →
+     **Save**.
 
-In Coolify:
+   > Under the LiveKit runtime the provider list is gated to what the worker can
+   > actually run: **Gemini / OpenAI realtime**, or an **OpenAI** STT/LLM/TTS
+   > pipeline. Picking an unsupported provider is rejected at save time.
 
-1. Create a new Docker Compose resource from this repository.
-2. Set the Compose file path to `docker-compose.coolify.yaml`.
-3. Attach your domain to the `ui` service on port `3010`. In Coolify's domain
-   field, use `https://voice.example.com:3010`; in the browser, open
-   `https://voice.example.com`.
-4. Set these required environment variables:
+3. **Create an agent from a template.** Go to **Agents** → **Create Agent** →
+   **Start from a Template**, and pick one (Customer Support, Appointment
+   Scheduling, Lead Qualification, or Virtual Receptionist). It opens in the
+   editor as a ready-to-run `Start → Agent → End` flow you can customize.
 
-```env
-POSTGRES_PASSWORD=generate-a-long-random-value
-REDIS_PASSWORD=generate-a-long-random-value
-MINIO_ROOT_PASSWORD=generate-a-long-random-value
-OSS_JWT_SECRET=generate-a-long-random-value
-```
+4. **Test it in the browser.** Open the agent and use the web call tester to talk
+   to it. Edit node prompts, connect nodes by dragging between the handles, then
+   **Save** and **Publish**.
 
-Coolify handles HTTPS and routing. The API, Postgres, Redis, and MinIO stay
-inside the Docker network. The app auto-detects the public URL from the `ui`
-service domain; set `APP_URL=https://voice.example.com` only when you want to
-override that generated domain.
+5. **(Optional) Connect a phone number.** See *Telephony* below.
 
-Detailed guide: `docs/deployment/coolify.mdx`.
+---
 
-## Basic Configuration
+## 4. Configuration Basics
 
 Docker Compose reads variables from your shell or from a root `.env` file.
-Defaults are for local development only.
+Defaults are for **local development only** — change them before any shared or
+production deployment.
 
-Common values:
+Common values (`.env`):
 
 ```env
 ALLOW_PUBLIC_SIGNUP=false
 SINGLE_ORGANIZATION_MODE=true
-MANAGED_ORGANIZATION_PROVIDER_ID=managed_single_org
 ENABLE_TELEMETRY=false
-DISABLE_HOSTED_CLOUD=true
 OSS_JWT_SECRET=change-this-before-production
+GEMINI_API_KEY=
 ```
 
-The bundled local services use these default development credentials:
+Bundled local service credentials (development defaults):
 
 - Postgres: `postgres` / `postgres`
 - Redis password: `redissecret`
 - MinIO: `minioadmin` / `minioadmin`
 
-Change them before any shared or production deployment.
+Put real provider keys in `.env` (for container env) or in the dashboard. Do not
+commit secrets.
 
-## LiveKit And Vobiz Setup
+---
 
-The stack starts with `VOICE_RUNTIME=livekit`. Add LiveKit settings through the
-UI at `Telephony Configurations`, or provide them as environment variables
-before starting the stack.
+## 5. Telephony (LiveKit + Vobiz)
 
-Minimum LiveKit variables:
+The stack starts with `VOICE_RUNTIME=livekit`. Add LiveKit settings in the
+dashboard under **Telephony Configurations**, or as environment variables before
+starting:
 
 ```env
 VOICE_RUNTIME=livekit
@@ -146,26 +190,24 @@ LIVEKIT_SIP_INBOUND_HOST=your-livekit-sip-host
 LIVEKIT_WORKER_MANAGED_BY_API=true
 ```
 
-For Vobiz, use the `Vobiz + LiveKit setup` flow in the Telephony
+For Vobiz, use the **Vobiz + LiveKit setup** wizard on the Telephony
 Configurations page. It saves the LiveKit runtime settings, stores the Vobiz
-account credentials, imports CLIs/phone numbers when available, and provisions
-the related SIP assets.
+account credentials, imports phone numbers, and provisions the SIP assets. Use
+the **Test Vobiz connection** button to verify credentials before the full run.
 
-You still need to configure your own LLM, STT, TTS, telephony, and observability
-credentials for real calls. Do not put production secrets in committed files.
+You still need your own LLM, STT/TTS, telephony, and observability credentials
+for real calls.
 
-## Local Source Development
+---
 
-Use this path when you want to run backend and frontend processes directly on
-your machine.
+## 6. Local Source Development
 
-Requirements:
+Run the backend and frontend directly on your machine (Postgres/Redis/MinIO
+still run in Docker).
 
-- Python 3.13.
-- Node.js 24.
-- Docker for Postgres, Redis, and MinIO.
+Requirements: **Python 3.13**, **Node.js 24**, Docker.
 
-Setup:
+**macOS / Linux:**
 
 ```bash
 git submodule update --init --recursive
@@ -183,7 +225,7 @@ npm install
 npm run dev
 ```
 
-PowerShell equivalents:
+**Windows (PowerShell):**
 
 ```powershell
 git submodule update --init --recursive
@@ -199,78 +241,64 @@ npm install
 npm run dev
 ```
 
-Direct local UI defaults to http://localhost:3000. The Docker quick install UI
-uses http://localhost:3010.
+The direct-local UI runs on http://localhost:3000 (the Docker quick start uses
+http://localhost:3010).
 
-## Verification
+---
 
-Backend health:
+## 7. Coolify Deployment (Production)
 
-```bash
-curl http://localhost:8000/api/v1/health
+For production, use Coolify with the dedicated compose file
+`docker-compose.coolify.yaml`:
+
+1. Create a new Docker Compose resource from this repository.
+2. Set the Compose file path to `docker-compose.coolify.yaml`.
+3. Attach your domain to the `ui` service on port `3010`. In Coolify's domain
+   field use `https://voice.example.com:3010`; open `https://voice.example.com`
+   in the browser.
+4. Set these required environment variables:
+
+```env
+POSTGRES_PASSWORD=generate-a-long-random-value
+REDIS_PASSWORD=generate-a-long-random-value
+MINIO_ROOT_PASSWORD=generate-a-long-random-value
+OSS_JWT_SECRET=generate-a-long-random-value
 ```
 
-Targeted checks for the LiveKit/Vobiz release area:
+Coolify handles HTTPS and routing; Postgres, Redis, and MinIO stay inside the
+Docker network. The app auto-detects the public URL from the `ui` domain — set
+`APP_URL=https://voice.example.com` only to override it.
 
-```bash
-source venv/bin/activate
-set -a && source api/.env.test && set +a
-ruff check api/routes/livekit.py api/services/livekit api/tests/test_livekit_vobiz_setup.py api/tests/test_livekit_worker.py api/tests/telephony/vobiz/test_provider.py
-python -m pytest api/tests/test_livekit_vobiz_setup.py api/tests/test_livekit_worker.py api/tests/telephony/vobiz/test_provider.py
-```
+Detailed guide: `docs/deployment/coolify.mdx`.
 
-PowerShell:
+---
 
-```powershell
-.\venv\Scripts\Activate.ps1
-Get-Content api\.env.test | ForEach-Object {
-  if ($_ -match '^\s*([^#][^=]+)=(.*)$') { Set-Item -Path "env:$($matches[1].Trim())" -Value $matches[2].Trim('"') }
-}
-ruff check api/routes/livekit.py api/services/livekit api/tests/test_livekit_vobiz_setup.py api/tests/test_livekit_worker.py api/tests/telephony/vobiz/test_provider.py
-python -m pytest api/tests/test_livekit_vobiz_setup.py api/tests/test_livekit_worker.py api/tests/telephony/vobiz/test_provider.py
-```
+## 8. Useful Commands
 
-## Release Hygiene
-
-Before publishing this fork or creating an open-source artifact, follow
-`docs/developer/upstream-compatibility.md`.
-
-At minimum:
-
-- Keep `ui/openapi-ts-error-1779461066256.log` deleted.
-- Do not stage `api/.env`, `ui/.env`, runtime directories, browser caches, or
-  any `*.log` files.
-- Verify `api/.env.example`, `docker-compose.yaml`, and
-  `docker-compose.dev.yaml` contain placeholders only.
-- Replace business-specific prefixes or identifiers in LiveKit/Vobiz code.
-- Review Vobiz tests for fake credentials, fake phone numbers, and fake account
-  data only.
-- Decide whether broad UI polish files belong in this release or should be
-  split into a separate change.
-
-Final scans before pushing:
-
-```bash
-git status --short
-rg -n -i "private-client-name|private-project-name|real-customer-phone|real-customer-email" .
-```
-
-The private-data scan should return no source-code hits except ignored local
-files.
-
-## Useful Commands
-
-Stop containers:
+Stop the stack (same command on macOS / Linux / Windows):
 
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml down
 ```
 
-Reset local Docker data. This deletes database, Redis, MinIO, and runtime
-volumes:
+Reset all local data (deletes the database, Redis, MinIO, and runtime volumes):
 
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml down -v
+```
+
+Rebuild the API image after backend dependency changes:
+
+```bash
+bash scripts/docker_dev.sh rebuild      # macOS / Linux
+.\scripts\docker_dev.ps1 rebuild        # Windows
+```
+
+Tail logs:
+
+```bash
+bash scripts/docker_dev.sh logs         # macOS / Linux
+.\scripts\docker_dev.ps1 logs           # Windows
 ```
 
 Regenerate the frontend API client after backend API changes:
@@ -280,15 +308,40 @@ cd ui
 npm run generate-client
 ```
 
-## Project Layout
+---
+
+## 9. Troubleshooting
+
+- **`docker compose version` fails** — Docker Desktop isn't running, or Compose
+  v2 isn't installed. Start Docker Desktop and re-check.
+- **First start is slow** — the API image is building locally; this is expected
+  on the first run only. Watch progress with `docker_dev.sh logs`.
+- **Port already in use** — free the ports listed in *Prerequisites*, or stop the
+  process using them.
+- **`.\start.ps1` is blocked (Windows)** — run
+  `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first.
+- **`cloudflared` shows tunnel warnings** — the local stack runs a free Cloudflare
+  quick-tunnel for convenience; warnings are harmless and the app works without
+  it. It is not used in the Coolify deployment.
+- **Can't sign up after the first user** — that's by design. Set
+  `ALLOW_PUBLIC_SIGNUP=true` to allow more signups.
+- **A model provider won't save** — under the LiveKit runtime only the
+  worker-supported providers (Gemini/OpenAI realtime, OpenAI pipeline) are
+  allowed; pick one of those.
+
+---
+
+## 10. Project Layout
 
 ```text
-api/       FastAPI backend, workers, integrations, LiveKit runtime
-ui/        Next.js 15 frontend
-scripts/   Local setup and service scripts
-docs/      Documentation source
+api/       FastAPI backend, ARQ worker, integrations, LiveKit runtime
+ui/        Next.js 15 frontend and workflow editor
+scripts/   Setup and service scripts (bash + PowerShell)
+docs/      Documentation source (Mintlify)
 ```
+
+Contributor and upstream-sync notes live in `docs/developer/`.
 
 ## License
 
-This repository is licensed under the BSD 2-Clause License. See `LICENSE`.
+BSD 2-Clause. See `LICENSE`.

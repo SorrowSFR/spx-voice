@@ -47,11 +47,14 @@ switch ($Command) {
         Ensure-EnvFile '.env.example' '.env'
         Ensure-EnvFile 'api/.env.example' 'api/.env'
         Ensure-EnvFile 'ui/.env.example' 'ui/.env'
-        docker @ComposeArgs up -d --pull missing
+        # `up` pulls the public images and builds the API image locally from
+        # api/Dockerfile on first run when no published image is available. The
+        # first build can take a few minutes; later starts reuse the built image.
+        docker @ComposeArgs up -d
         Print-NextSteps
     }
     'rebuild' {
-        docker @ComposeArgs pull api ui
+        docker @ComposeArgs build api
         docker @ComposeArgs up -d --force-recreate api ui
         Print-NextSteps
     }
