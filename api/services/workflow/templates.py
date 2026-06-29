@@ -21,7 +21,6 @@ from typing import Any
 
 from loguru import logger
 
-from api.db import db_client
 from api.db.workflow_template_client import WorkflowTemplateClient
 
 

@@ -45,10 +45,10 @@ from typing import Any
 
 import pytest
 from pipecat.frames.frames import TranscriptionFrame
+from pipecat.tests import MockLLMService, MockTTSService
 from pipecat.tests.mock_transport import MockTransport
 from pipecat.transports.base_transport import TransportParams
 from pipecat.utils.time import time_now_iso8601
-from pipecat.tests import MockLLMService, MockTTSService
 
 from api.enums import WorkflowRunMode, WorkflowRunState
 from api.services.pipecat.audio_config import create_audio_config
@@ -325,9 +325,9 @@ async def _run_test_body(workflow_run_setup, db_session) -> None:
 
     # Knowledge base was queried
     assert len(kb_queries) >= 1, "Knowledge base should have been queried"
-    assert any(
-        "subsidy" in q.lower() or "3kw" in q.lower() for q in kb_queries
-    ), f"KB should be queried about subsidy/3kW, got: {kb_queries}"
+    assert any("subsidy" in q.lower() or "3kw" in q.lower() for q in kb_queries), (
+        f"KB should be queried about subsidy/3kW, got: {kb_queries}"
+    )
 
     # LLM was called multiple times (greeting + responses)
     assert llm.get_current_step() >= 2, (
@@ -346,9 +346,7 @@ async def _run_test_body(workflow_run_setup, db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_literate_modern_scheme_inquiry_scenario(
-    workflow_run_setup, db_session
-):
+async def test_literate_modern_scheme_inquiry_scenario(workflow_run_setup, db_session):
     """E2E test for SC-MODERN-01: Literate Modern Caller.
 
     Verifies the complete flow:

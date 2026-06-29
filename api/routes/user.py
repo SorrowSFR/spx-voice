@@ -14,8 +14,10 @@ from api.services.configuration.check_validity import (
     APIKeyStatusResponse,
     UserConfigurationValidator,
 )
-from api.services.configuration.defaults import DEFAULT_SERVICE_PROVIDERS
-from api.services.configuration.defaults import DEFAULT_IS_REALTIME
+from api.services.configuration.defaults import (
+    DEFAULT_IS_REALTIME,
+    DEFAULT_SERVICE_PROVIDERS,
+)
 from api.services.configuration.masking import check_for_masked_keys, mask_user_config
 from api.services.configuration.merge import SERVICE_FIELDS, merge_user_configurations
 from api.services.configuration.registry import REGISTRY, ServiceType
@@ -77,26 +79,44 @@ async def get_default_configurations() -> DefaultConfigurationsResponse:
         return filtered or items
 
     configurations = {
-        "llm": filter_livekit_providers("llm", filter_dograh_provider({
-            provider: model_cls.model_json_schema()
-            for provider, model_cls in REGISTRY[ServiceType.LLM].items()
-        })),
-        "tts": filter_livekit_providers("tts", filter_dograh_provider({
-            provider: model_cls.model_json_schema()
-            for provider, model_cls in REGISTRY[ServiceType.TTS].items()
-        })),
-        "stt": filter_livekit_providers("stt", filter_dograh_provider({
-            provider: model_cls.model_json_schema()
-            for provider, model_cls in REGISTRY[ServiceType.STT].items()
-        })),
+        "llm": filter_livekit_providers(
+            "llm",
+            filter_dograh_provider(
+                {
+                    provider: model_cls.model_json_schema()
+                    for provider, model_cls in REGISTRY[ServiceType.LLM].items()
+                }
+            ),
+        ),
+        "tts": filter_livekit_providers(
+            "tts",
+            filter_dograh_provider(
+                {
+                    provider: model_cls.model_json_schema()
+                    for provider, model_cls in REGISTRY[ServiceType.TTS].items()
+                }
+            ),
+        ),
+        "stt": filter_livekit_providers(
+            "stt",
+            filter_dograh_provider(
+                {
+                    provider: model_cls.model_json_schema()
+                    for provider, model_cls in REGISTRY[ServiceType.STT].items()
+                }
+            ),
+        ),
         "embeddings": {
             provider: model_cls.model_json_schema()
             for provider, model_cls in REGISTRY[ServiceType.EMBEDDINGS].items()
         },
-        "realtime": filter_livekit_providers("realtime", {
-            provider: model_cls.model_json_schema()
-            for provider, model_cls in REGISTRY[ServiceType.REALTIME].items()
-        }),
+        "realtime": filter_livekit_providers(
+            "realtime",
+            {
+                provider: model_cls.model_json_schema()
+                for provider, model_cls in REGISTRY[ServiceType.REALTIME].items()
+            },
+        ),
         "default_providers": DEFAULT_SERVICE_PROVIDERS,
         "default_is_realtime": DEFAULT_IS_REALTIME,
     }

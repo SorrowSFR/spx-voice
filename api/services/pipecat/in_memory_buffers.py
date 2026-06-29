@@ -10,8 +10,8 @@ from api.services.pipecat.realtime_feedback_events import (
     realtime_feedback_event_sort_key,
     stamp_realtime_feedback_event,
 )
-from api.utils.transcript import generate_transcript_text as _generate_transcript_text
 from api.utils.runtime_enums import RealtimeFeedbackType
+from api.utils.transcript import generate_transcript_text as _generate_transcript_text
 
 
 class InMemoryAudioBuffer:

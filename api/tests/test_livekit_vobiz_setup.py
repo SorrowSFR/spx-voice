@@ -162,7 +162,9 @@ async def test_setup_vobiz_livekit_defaults_to_starter_workflow(monkeypatch):
 
     monkeypatch.setattr(livekit, "db_client", db)
     monkeypatch.setattr(livekit, "effective_livekit_settings", lambda: _settings())
-    monkeypatch.setattr(livekit, "save_livekit_settings", Mock(return_value=_settings()))
+    monkeypatch.setattr(
+        livekit, "save_livekit_settings", Mock(return_value=_settings())
+    )
     monkeypatch.setattr(livekit, "apply_livekit_worker_settings", Mock())
     monkeypatch.setattr(livekit, "sync_vobiz_livekit_config", sync)
     ensure_default = AsyncMock()
@@ -247,12 +249,18 @@ async def test_setup_vobiz_livekit_updates_existing_same_account(monkeypatch):
 
     monkeypatch.setattr(livekit, "db_client", db)
     monkeypatch.setattr(livekit, "effective_livekit_settings", lambda: _settings())
-    monkeypatch.setattr(livekit, "save_livekit_settings", Mock(return_value=_settings()))
+    monkeypatch.setattr(
+        livekit, "save_livekit_settings", Mock(return_value=_settings())
+    )
     monkeypatch.setattr(livekit, "apply_livekit_worker_settings", Mock())
     monkeypatch.setattr(
         livekit,
         "sync_vobiz_livekit_config",
-        AsyncMock(return_value=SimpleNamespace(ok=True, message=None, imported_phone_numbers=0)),
+        AsyncMock(
+            return_value=SimpleNamespace(
+                ok=True, message=None, imported_phone_numbers=0
+            )
+        ),
     )
     monkeypatch.setattr(
         livekit,
@@ -386,7 +394,9 @@ async def test_setup_vobiz_livekit_reports_sync_failure_without_500(monkeypatch)
 
     monkeypatch.setattr(livekit, "db_client", db)
     monkeypatch.setattr(livekit, "effective_livekit_settings", lambda: _settings())
-    monkeypatch.setattr(livekit, "save_livekit_settings", Mock(return_value=_settings()))
+    monkeypatch.setattr(
+        livekit, "save_livekit_settings", Mock(return_value=_settings())
+    )
     monkeypatch.setattr(livekit, "apply_livekit_worker_settings", Mock())
     monkeypatch.setattr(livekit, "sync_vobiz_livekit_config", sync_failure)
     monkeypatch.setattr(
@@ -421,7 +431,9 @@ async def test_import_vobiz_phone_numbers_adds_missing_numbers_on_rerun(monkeypa
     db = SimpleNamespace(
         list_phone_numbers_for_config=AsyncMock(
             return_value=[
-                SimpleNamespace(address="+910000000000", address_normalized="+910000000000")
+                SimpleNamespace(
+                    address="+910000000000", address_normalized="+910000000000"
+                )
             ],
         ),
         create_phone_number=AsyncMock(),
@@ -481,7 +493,9 @@ async def test_sync_livekit_dispatch_rules_deletes_stale_rule_before_recreate(
 
     monkeypatch.setattr(vobiz_service.livekit_api, "LiveKitAPI", FakeLiveKitAPI)
     monkeypatch.setattr(vobiz_service, "_ensure_livekit_dispatch_rule", ensure_rule)
-    monkeypatch.setattr(vobiz_service, "effective_livekit_settings", lambda: _settings())
+    monkeypatch.setattr(
+        vobiz_service, "effective_livekit_settings", lambda: _settings()
+    )
     monkeypatch.setattr(
         vobiz_service,
         "db_client",
@@ -493,9 +507,7 @@ async def test_sync_livekit_dispatch_rules_deletes_stale_rule_before_recreate(
     result = await vobiz_service._sync_livekit_dispatch_rules(
         credentials={
             "livekit_sip_inbound_trunk_id": "inbound-trunk",
-            "livekit_sip_dispatch_rules": {
-                "1": {"sip_dispatch_rule_id": "old-rule"}
-            },
+            "livekit_sip_dispatch_rules": {"1": {"sip_dispatch_rule_id": "old-rule"}},
         },
         phone_rows=[
             SimpleNamespace(

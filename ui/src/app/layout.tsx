@@ -3,8 +3,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import ChatwootWidget from "@/components/ChatwootWidget";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import ChatwootWidget from "@/components/ChatwootWidget";
 import AppLayout from "@/components/layout/AppLayout";
 import PostHogIdentify from "@/components/PostHogIdentify";
 import SpinLoader from "@/components/SpinLoader";

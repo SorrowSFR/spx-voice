@@ -8,7 +8,6 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
-from api.utils.run_context import set_current_run_id
 
 from api.db import db_client
 from api.services.telephony.call_transfer_manager import get_call_transfer_manager
@@ -27,6 +26,7 @@ from api.services.telephony.transfer_event_protocol import (
     TransferEvent,
     TransferEventType,
 )
+from api.utils.run_context import set_current_run_id
 
 router = APIRouter()
 

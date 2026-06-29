@@ -47,10 +47,15 @@ def resolve_embedding_settings(user_config: Any) -> dict[str, Any]:
 
     realtime = getattr(user_config, "realtime", None)
     realtime_provider = _provider_value(getattr(realtime, "provider", None))
-    if realtime and realtime_provider in {
-        ServiceProviders.GOOGLE_REALTIME.value,
-        ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
-    } and _has_api_key(getattr(realtime, "api_key", None)):
+    if (
+        realtime
+        and realtime_provider
+        in {
+            ServiceProviders.GOOGLE_REALTIME.value,
+            ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
+        }
+        and _has_api_key(getattr(realtime, "api_key", None))
+    ):
         return {
             "provider": ServiceProviders.GOOGLE.value,
             "api_key": getattr(realtime, "api_key", None),

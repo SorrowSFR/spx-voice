@@ -15,7 +15,6 @@ from fastapi import (
     WebSocket,
 )
 from loguru import logger
-from api.utils.run_context import set_current_run_id
 from pydantic import BaseModel
 from starlette.websockets import WebSocketDisconnect
 
@@ -35,13 +34,13 @@ from api.enums import (
 from api.errors.telephony_errors import TelephonyError
 from api.sdk_expose import sdk_expose
 from api.services.auth.depends import get_user
-from api.services.quota_service import check_dograh_quota, check_dograh_quota_by_user_id
 from api.services.livekit.client import (
     LiveKitConfigurationError,
     create_outbound_sip_call,
     is_livekit_runtime,
 )
 from api.services.livekit.vobiz import sync_vobiz_livekit_config
+from api.services.quota_service import check_dograh_quota, check_dograh_quota_by_user_id
 from api.services.telephony.call_transfer_manager import get_call_transfer_manager
 from api.services.telephony.factory import (
     get_all_telephony_providers,
@@ -58,6 +57,7 @@ from api.services.telephony.transfer_event_protocol import (
     TransferEventType,
 )
 from api.utils.common import get_backend_endpoints
+from api.utils.run_context import set_current_run_id
 from api.utils.telephony_helper import (
     generic_hangup_response,
     normalize_webhook_data,
@@ -175,9 +175,7 @@ async def initiate_call(
             if not workflow:
                 raise HTTPException(status_code=404, detail="Workflow not found")
             template_vars = workflow.template_context_variables or {}
-            numeric_suffix = (
-                int(str(uuid.uuid4()).replace("-", "")[:8], 16) % 100000000
-            )
+            numeric_suffix = int(str(uuid.uuid4()).replace("-", "")[:8], 16) % 100000000
             workflow_run_name = f"WR-LK-OUT-{numeric_suffix:08d}"
             workflow_run = await db_client.create_workflow_run(
                 workflow_run_name,

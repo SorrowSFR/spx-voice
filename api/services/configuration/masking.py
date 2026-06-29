@@ -121,7 +121,9 @@ def _mask_service(service_cfg: Optional[ServiceConfig]) -> Optional[Dict[str, An
     return data
 
 
-def _mask_service_dict(service_cfg: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _mask_service_dict(
+    service_cfg: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
     if service_cfg is None:
         return None
 
@@ -223,7 +225,9 @@ def merge_workflow_configuration_api_keys(
     return incoming
 
 
-def check_workflow_configurations_for_masked_keys(configurations: Optional[Dict]) -> None:
+def check_workflow_configurations_for_masked_keys(
+    configurations: Optional[Dict],
+) -> None:
     """Raise if workflow model overrides still contain masked placeholders."""
     if not configurations:
         return

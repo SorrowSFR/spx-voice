@@ -208,9 +208,7 @@ async def _postprocess_telephony_configuration(
         requested_phone_numbers=requested_phone_numbers or [],
     )
     return (
-        await db_client.get_telephony_configuration_for_org(
-            row.id, row.organization_id
-        )
+        await db_client.get_telephony_configuration_for_org(row.id, row.organization_id)
         or row
     )
 
@@ -403,7 +401,9 @@ async def update_telephony_configuration(
             existing.provider, credentials, existing.credentials or {}
         )
         if existing.provider == "vobiz":
-            if credentials.get("auth_id") == (existing.credentials or {}).get("auth_id"):
+            if credentials.get("auth_id") == (existing.credentials or {}).get(
+                "auth_id"
+            ):
                 credentials = preserve_vobiz_livekit_credentials(
                     credentials, existing.credentials or {}
                 )

@@ -101,7 +101,9 @@ class UserConfigurationValidator:
         return {"status": [{"model": "all", "message": "ok"}]}
 
     def _provider_value(self, provider: ServiceProviders | str) -> str:
-        return provider.value if isinstance(provider, ServiceProviders) else str(provider)
+        return (
+            provider.value if isinstance(provider, ServiceProviders) else str(provider)
+        )
 
     def _validate_service(
         self,

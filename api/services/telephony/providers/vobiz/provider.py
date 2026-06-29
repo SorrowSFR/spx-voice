@@ -4,7 +4,7 @@ Vobiz implementation of the TelephonyProvider interface.
 
 import json
 import random
-from decimal import Decimal, ROUND_CEILING
+from decimal import ROUND_CEILING, Decimal
 from html import escape
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -406,14 +406,11 @@ class VobizProvider(TelephonyProvider):
     def _amount_from_cdr(data: dict[str, Any]) -> tuple[Decimal, str | None]:
         key, raw_value = _first_value(data, ["total_cost", "cost", "totalCost"])
         amount = _decimal_or_none(raw_value) or Decimal("0")
-        if (
-            key == "totalCost"
-            or (
-                key == "cost"
-                and "ratePerMinute" in data
-                and "total_cost" not in data
-                and amount >= Decimal("10")
-            )
+        if key == "totalCost" or (
+            key == "cost"
+            and "ratePerMinute" in data
+            and "total_cost" not in data
+            and amount >= Decimal("10")
         ):
             amount = amount / Decimal("100")
         return amount, key
@@ -472,17 +469,17 @@ class VobizProvider(TelephonyProvider):
     ) -> dict[str, Any]:
         currency = str(pricing.get("currency") or "INR").upper()
         rate = _decimal_or_none(pricing.get("rate_per_minute")) or Decimal("0")
-        streaming_rate = (
-            _decimal_or_none(pricing.get("streaming_rate_per_minute"))
-            or Decimal("0")
-        )
+        streaming_rate = _decimal_or_none(
+            pricing.get("streaming_rate_per_minute")
+        ) or Decimal("0")
         total_rate = rate + streaming_rate
-        billing_increment = max(_int_or_zero(pricing.get("billing_increment_seconds")), 1)
+        billing_increment = max(
+            _int_or_zero(pricing.get("billing_increment_seconds")), 1
+        )
         minimum_duration = _int_or_zero(pricing.get("minimum_duration_seconds"))
         duration = max(minimum_duration, 0)
         billable_seconds = (
-            Decimal(str(duration))
-            / Decimal(str(billing_increment))
+            Decimal(str(duration)) / Decimal(str(billing_increment))
         ).to_integral_value(rounding=ROUND_CEILING) * Decimal(str(billing_increment))
         amount = billable_seconds * total_rate / Decimal("60")
         return {

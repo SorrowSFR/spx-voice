@@ -1,7 +1,8 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from api.routes.user import router
 from api.schemas.user_configuration import UserConfiguration
@@ -10,7 +11,6 @@ from api.services.configuration.check_validity import UserConfigurationValidator
 from api.services.configuration.defaults import build_env_default_user_configuration
 from api.services.configuration.masking import check_for_masked_keys
 from api.services.configuration.registry import ServiceProviders
-
 
 REALTIME_ONLY_PAYLOAD = {
     "is_realtime": True,

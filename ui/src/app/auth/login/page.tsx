@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, Lock, Mail, Sparkles, ArrowRight } from "lucide-react";
+import { ArrowRight,Eye, EyeOff, Lock, Mail, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";

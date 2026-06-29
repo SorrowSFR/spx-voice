@@ -34,19 +34,18 @@ from typing import Optional
 
 import pytest
 from pipecat.frames.frames import TranscriptionFrame
+from pipecat.tests import MockLLMService, MockTTSService
 from pipecat.tests.mock_transport import MockTransport
 from pipecat.transports.base_transport import TransportParams
 from pipecat.utils.time import time_now_iso8601
 
-from api.enums import WorkflowRunMode, WorkflowRunState
+from api.enums import WorkflowRunMode
 from api.services.pipecat.audio_config import create_audio_config
 from api.services.pipecat.run_pipeline import _run_pipeline
 from api.tests.integrations._run_pipeline_helpers import (
     create_workflow_run_rows,
     patch_run_pipeline_externals,
 )
-from pipecat.tests import MockLLMService, MockTTSService
-
 
 # =============================================================================
 # Test Workflow Definition - Rural Caller with Disconnection Support
@@ -188,6 +187,7 @@ TEST_HARD_TIMEOUT_SECONDS = 90.0
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 async def dropped_connection_workflow_setup(db_session, async_session):
     """Create org/user/user_configuration/workflow/workflow_run rows for
@@ -204,6 +204,7 @@ async def dropped_connection_workflow_setup(db_session, async_session):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def create_hindi_transcription(text: str) -> TranscriptionFrame:
     """Create a TranscriptionFrame simulating Hindi speech input."""
@@ -249,6 +250,7 @@ async def wait_for_condition(
 # =============================================================================
 # E2E Test Body - Dropped Connection Recovery
 # =============================================================================
+
 
 async def run_dropped_connection_recovery_test(
     workflow_run_setup,
@@ -319,7 +321,11 @@ async def run_dropped_connection_recovery_test(
         # Session 2, Step 2: User confirms land size
         MockLLMService.create_function_call_chunks(
             function_name="collect_crop_info_transition",
-            arguments={"land_size": "5 acre", "land_confirmed": True, "from_reconnect": True},
+            arguments={
+                "land_size": "5 acre",
+                "land_confirmed": True,
+                "from_reconnect": True,
+            },
             tool_call_id="call_4",
         ),
         # Session 2, Step 3: User provides crop info
@@ -384,9 +390,7 @@ async def run_dropped_connection_recovery_test(
             await asyncio.sleep(0.5)
 
             # User confirms availability
-            await pipeline_task.queue_frame(
-                create_hindi_transcription("haan")
-            )
+            await pipeline_task.queue_frame(create_hindi_transcription("haan"))
             results["steps_completed"].append("Session 1: User confirmed availability")
 
             # Wait for LLM to process
@@ -396,7 +400,9 @@ async def run_dropped_connection_recovery_test(
             await pipeline_task.queue_frame(
                 create_hindi_transcription("panch acre zameen hai")
             )
-            results["steps_completed"].append("Session 1: User provided land size (5 acre)")
+            results["steps_completed"].append(
+                "Session 1: User provided land size (5 acre)"
+            )
             results["disconnection_point"] = "after_land_size_provided"
 
             # =================================================================
@@ -409,7 +415,9 @@ async def run_dropped_connection_recovery_test(
                 logger.info("Simulating network drop at disconnection point")
 
                 # Store the current workflow run state before disconnect
-                pre_disconnect_run = await db_session.get_workflow_run_by_id(workflow_run.id)
+                pre_disconnect_run = await db_session.get_workflow_run_by_id(
+                    workflow_run.id
+                )
                 pre_disconnect_context = pre_disconnect_run.gathered_context.copy()
                 pre_disconnect_nodes = pre_disconnect_context.get("nodes_visited", [])
 
@@ -499,10 +507,12 @@ async def run_dropped_connection_recovery_test(
         )
         assert "End Call" in nodes_visited, "End Call node should have been visited"
 
-        results["steps_completed"].extend([
-            "Workflow completed successfully",
-            f"Nodes visited: {nodes_visited}",
-        ])
+        results["steps_completed"].extend(
+            [
+                "Workflow completed successfully",
+                f"Nodes visited: {nodes_visited}",
+            ]
+        )
 
         # Verify extraction captured the conversation outcomes
         extracted = refreshed.gathered_context
@@ -543,6 +553,7 @@ async def run_dropped_connection_recovery_test(
 # =============================================================================
 # Test Cases
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_sc_rural_04_dropped_connection_recovery(
@@ -603,7 +614,7 @@ async def test_sc_rural_04_dropped_connection_recovery(
     print(f"Disconnection Point: {results['disconnection_point']}")
     print(f"Steps Completed: {results['steps_completed']}")
     print(f"Extracted Variables: {results['extracted_variables']}")
-    if results['errors']:
+    if results["errors"]:
         print(f"Errors/Notes: {results['errors']}")
     print("=" * 60)
 

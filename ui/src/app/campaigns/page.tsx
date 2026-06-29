@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Megaphone } from 'lucide-react';
+import { Megaphone,Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
@@ -155,7 +155,7 @@ export default function CampaignsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {campaignsData.campaigns.map((campaign, index) => (
+                                    {campaignsData.campaigns.map((campaign) => (
                                         <TableRow
                                             key={campaign.id}
                                             className="group cursor-pointer transition-all duration-200 hover:bg-accent/40"

@@ -7,7 +7,10 @@ async def assign_user_to_managed_organization(
     user: UserModel,
 ) -> tuple[OrganizationModel, bool]:
     """Attach a user to the single managed organization used in OSS mode."""
-    organization, was_created = await db_client.get_or_create_organization_by_provider_id(
+    (
+        organization,
+        was_created,
+    ) = await db_client.get_or_create_organization_by_provider_id(
         org_provider_id=MANAGED_ORGANIZATION_PROVIDER_ID,
         user_id=user.id,
     )

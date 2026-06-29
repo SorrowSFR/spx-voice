@@ -2,15 +2,15 @@
 
 import {
     Activity,
+    ArrowRight,
     Bot,
     Clock,
     Key,
     Phone,
+    Sparkles,
     TrendingUp,
     Workflow,
-    ArrowRight,
     Zap,
-    Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
@@ -357,5 +357,6 @@ export default function OverviewPage() {
 }
 
 // Import Settings for resources section
-import { Settings, FileText, Database } from 'lucide-react';
+import { Database,FileText, Settings } from 'lucide-react';
+
 import { cn } from '@/lib/utils';

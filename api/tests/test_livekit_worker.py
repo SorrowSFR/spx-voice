@@ -1199,7 +1199,9 @@ def test_runtime_configuration_reports_mode():
         is_realtime=True,
         realtime=None,
         llm=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4.1"),
-        stt=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4o-transcribe"),
+        stt=SimpleNamespace(
+            provider=ServiceProviders.OPENAI, model="gpt-4o-transcribe"
+        ),
         tts=SimpleNamespace(provider=ServiceProviders.OPENAI, model="gpt-4o-mini-tts"),
     )
     pipeline_mode = worker._runtime_configuration_from_user_config(pipeline_cfg)
@@ -1209,11 +1211,24 @@ def test_runtime_configuration_reports_mode():
 def test_supports_realtime_generate_reply_prefix_match():
     google = ServiceProviders.GOOGLE_REALTIME.value
     # The known unsupported preview model.
-    assert worker._supports_realtime_generate_reply(google, "gemini-3.1-flash-live-preview") is False
+    assert (
+        worker._supports_realtime_generate_reply(
+            google, "gemini-3.1-flash-live-preview"
+        )
+        is False
+    )
     # A "3.1"-containing but unrelated name must NOT be misclassified.
-    assert worker._supports_realtime_generate_reply(google, "gemini-3.10-pro-live") is True
-    assert worker._supports_realtime_generate_reply(google, "gemini-2.5-flash-live") is True
+    assert (
+        worker._supports_realtime_generate_reply(google, "gemini-3.10-pro-live") is True
+    )
+    assert (
+        worker._supports_realtime_generate_reply(google, "gemini-2.5-flash-live")
+        is True
+    )
     # Non-google realtime providers always support it here.
-    assert worker._supports_realtime_generate_reply(
-        ServiceProviders.OPENAI_REALTIME.value, "gpt-realtime"
-    ) is True
+    assert (
+        worker._supports_realtime_generate_reply(
+            ServiceProviders.OPENAI_REALTIME.value, "gpt-realtime"
+        )
+        is True
+    )

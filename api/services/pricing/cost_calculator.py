@@ -49,7 +49,6 @@ from api.services.pricing.models import (
     TokenPricingModel,
 )
 
-
 REALTIME_PROVIDERS = {
     ServiceProviders.OPENAI_REALTIME.value,
     ServiceProviders.GOOGLE_REALTIME.value,
@@ -217,9 +216,15 @@ class CostCalculator:
         components: list[dict[str, Any]] = []
         warnings: list[str] = []
 
-        components.extend(self._llm_cost_components(usage_info.get("llm", {}), warnings))
-        components.extend(self._tts_cost_components(usage_info.get("tts", {}), warnings))
-        components.extend(self._stt_cost_components(usage_info.get("stt", {}), warnings))
+        components.extend(
+            self._llm_cost_components(usage_info.get("llm", {}), warnings)
+        )
+        components.extend(
+            self._tts_cost_components(usage_info.get("tts", {}), warnings)
+        )
+        components.extend(
+            self._stt_cost_components(usage_info.get("stt", {}), warnings)
+        )
         components.extend(
             self._realtime_duration_estimate_components(
                 usage_info,
@@ -280,8 +285,14 @@ class CostCalculator:
             processor, model = self._parse_key(key)
             provider = self._infer_provider(processor, model, "llm")
             pricing_model = self.get_pricing_model("llm", provider, model)
-            cost = pricing_model.calculate_cost(usage) if pricing_model else Decimal("0")
-            service = "realtime" if self._is_realtime_provider_or_model(provider, model) else "llm"
+            cost = (
+                pricing_model.calculate_cost(usage) if pricing_model else Decimal("0")
+            )
+            service = (
+                "realtime"
+                if self._is_realtime_provider_or_model(provider, model)
+                else "llm"
+            )
             component = self._base_component(
                 service=service,
                 provider=provider,
@@ -293,8 +304,12 @@ class CostCalculator:
                     "prompt_tokens": usage.get("prompt_tokens", 0),
                     "completion_tokens": usage.get("completion_tokens", 0),
                     "total_tokens": usage.get("total_tokens", 0),
-                    "cache_read_input_tokens": usage.get("cache_read_input_tokens") or 0,
-                    "cache_creation_input_tokens": usage.get("cache_creation_input_tokens") or 0,
+                    "cache_read_input_tokens": usage.get("cache_read_input_tokens")
+                    or 0,
+                    "cache_creation_input_tokens": usage.get(
+                        "cache_creation_input_tokens"
+                    )
+                    or 0,
                 },
             )
             if not pricing_model:
@@ -510,7 +525,9 @@ class CostCalculator:
 
     def _infer_provider(self, processor: str, model: str, service_type: str) -> str:
         """Infer provider using processor first, then model name."""
-        processor_provider = self._infer_provider_from_processor(processor, service_type)
+        processor_provider = self._infer_provider_from_processor(
+            processor, service_type
+        )
         if processor_provider != "unknown":
             return processor_provider
         return self._infer_provider_from_model(model, service_type)

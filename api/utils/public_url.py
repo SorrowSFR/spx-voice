@@ -4,7 +4,6 @@ import os
 from collections.abc import Mapping
 from urllib.parse import urlsplit, urlunsplit
 
-
 DEFAULT_UI_PORT = "3010"
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
@@ -76,7 +75,11 @@ def normalize_public_url(value: str, *, strip_internal_port: bool = False) -> st
 
     parsed = urlsplit(url)
     netloc = parsed.netloc
-    if strip_internal_port and parsed.hostname and _port(parsed) == int(DEFAULT_UI_PORT):
+    if (
+        strip_internal_port
+        and parsed.hostname
+        and _port(parsed) == int(DEFAULT_UI_PORT)
+    ):
         if parsed.hostname not in LOCAL_HOSTS:
             host = parsed.hostname
             if ":" in host and not host.startswith("["):

@@ -42,20 +42,20 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.tests import MockLLMService, MockTTSService
 from pipecat.tests.mock_transport import MockTransport
 from pipecat.transports.base_transport import TransportParams
 from pipecat.turns.user_mute import (
     CallbackUserMuteStrategy,
     MuteUntilFirstBotCompleteUserMuteStrategy,
 )
-from api.utils.runtime_enums import EndTaskReason
 
 from api.services.workflow.pipecat_engine import PipecatEngine
 from api.services.workflow.pipecat_engine_variable_extractor import (
     VariableExtractionManager,
 )
 from api.services.workflow.workflow_graph import WorkflowGraph
-from pipecat.tests import MockLLMService, MockTTSService
+from api.utils.runtime_enums import EndTaskReason
 
 
 async def create_test_pipeline_with_failing_transport(

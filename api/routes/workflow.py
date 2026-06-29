@@ -24,8 +24,8 @@ from api.services.configuration.masking import (
     check_workflow_configurations_for_masked_keys,
     mask_workflow_configurations,
     mask_workflow_definition,
-    merge_workflow_configuration_api_keys,
     merge_workflow_api_keys,
+    merge_workflow_configuration_api_keys,
 )
 from api.services.configuration.merge import SERVICE_FIELDS
 from api.services.configuration.resolve import (

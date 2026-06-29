@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings, Cpu, Activity } from "lucide-react";
+import { Activity,Cpu } from "lucide-react";
 
 import { MCPSection } from "@/components/MCPSection";
 import { TelemetrySection } from "@/components/TelemetrySection";

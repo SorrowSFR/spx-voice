@@ -2,11 +2,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pipecat.tests import MockLLMService
 
 from api.db.models import OrganizationModel, UserModel
 from api.schemas.user_configuration import UserConfiguration
 from api.tests.integrations._run_pipeline_helpers import USER_CONFIGURATION
-from pipecat.tests import MockLLMService
 
 
 def _log_texts(logs: dict | None, event_type: str) -> list[str]:

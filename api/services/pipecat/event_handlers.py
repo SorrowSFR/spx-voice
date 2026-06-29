@@ -18,12 +18,12 @@ from api.services.posthog_client import capture_event
 from api.services.workflow.pipecat_engine import PipecatEngine
 from api.tasks.arq import enqueue_job
 from api.tasks.function_names import FunctionNames
+from api.utils.runtime_enums import EndTaskReason
 from pipecat.frames.frames import (
     Frame,
 )
 from pipecat.pipeline.task import PipelineTask
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
-from api.utils.runtime_enums import EndTaskReason
 
 
 async def _capture_call_event(

@@ -15,7 +15,7 @@ export async function GET() {
   let turnEnabled = false;
   let forceTurnRelay = false;
   let hostedServicesEnabled = false;
-  let voiceRuntime: "livekit" = "livekit";
+  let voiceRuntime = "livekit" as const;
   let livekitEnabled = false;
 
   try {

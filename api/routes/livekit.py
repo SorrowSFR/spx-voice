@@ -304,9 +304,7 @@ async def setup_vobiz_livekit(
         )
         sync_result = VobizLiveKitSyncResult(
             ok=True,
-            message=(
-                "Vobiz config saved locally; LiveKit SIP provisioning skipped."
-            ),
+            message=("Vobiz config saved locally; LiveKit SIP provisioning skipped."),
             imported_phone_numbers=imported_phone_numbers,
         )
 
@@ -539,9 +537,7 @@ async def _sync_vobiz_configs_for_org(
             elif result.message:
                 failed.append(f"{row.name}: {result.message}")
         except Exception as exc:
-            logger.warning(
-                f"LiveKit Vobiz sync failed for config {row.id}: {exc}"
-            )
+            logger.warning(f"LiveKit Vobiz sync failed for config {row.id}: {exc}")
             failed.append(f"{row.name}: {exc}")
 
     if failed:

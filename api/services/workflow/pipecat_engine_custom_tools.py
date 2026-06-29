@@ -19,7 +19,6 @@ from pipecat.frames.frames import (
     TTSSpeakFrame,
 )
 from pipecat.services.llm_service import FunctionCallParams
-from api.utils.runtime_enums import EndTaskReason
 
 from api.db import db_client
 from api.enums import ToolCategory, WorkflowRunMode
@@ -32,6 +31,7 @@ from api.services.workflow.tools.custom_tool import (
     execute_http_tool,
     tool_to_function_schema,
 )
+from api.utils.runtime_enums import EndTaskReason
 
 if TYPE_CHECKING:
     from api.services.workflow.mcp_tool_session import McpToolSession

@@ -40,19 +40,18 @@ from typing import Optional
 
 import pytest
 from pipecat.frames.frames import TranscriptionFrame
+from pipecat.tests import MockLLMService, MockTTSService
 from pipecat.tests.mock_transport import MockTransport
 from pipecat.transports.base_transport import TransportParams
 from pipecat.utils.time import time_now_iso8601
 
-from api.enums import WorkflowRunMode, WorkflowRunState
+from api.enums import WorkflowRunMode
 from api.services.pipecat.audio_config import create_audio_config
 from api.services.pipecat.run_pipeline import _run_pipeline
 from api.tests.integrations._run_pipeline_helpers import (
     create_workflow_run_rows,
     patch_run_pipeline_externals,
 )
-from pipecat.tests import MockLLMService, MockTTSService
-
 
 # =============================================================================
 # Test Workflow Definition - Modern Area Coverage Query
@@ -222,6 +221,7 @@ TEST_HARD_TIMEOUT_SECONDS = 60.0
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 async def area_coverage_workflow_setup(db_session, async_session):
     """Create org/user/user_configuration/workflow/workflow_run rows for
@@ -238,6 +238,7 @@ async def area_coverage_workflow_setup(db_session, async_session):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def create_english_transcription(text: str) -> TranscriptionFrame:
     """Create a TranscriptionFrame simulating English speech input."""
@@ -283,6 +284,7 @@ async def wait_for_condition(
 # =============================================================================
 # Mock Knowledge Base Tool
 # =============================================================================
+
 
 class MockKnowledgeBaseTool:
     """Mock for the knowledge base retrieval tool.
@@ -331,6 +333,7 @@ class MockKnowledgeBaseTool:
 # Mock Email Tool - INFRASTRUCTURE GAP
 # =============================================================================
 
+
 class MockEmailTool:
     """Mock for the email sending tool.
 
@@ -355,11 +358,13 @@ class MockEmailTool:
             "subject": subject,
             "body": body,
         }
-        self.sent_confirmations.append({
-            "to": to_email,
-            "subject": subject,
-            "timestamp": time_now_iso8601(),
-        })
+        self.sent_confirmations.append(
+            {
+                "to": to_email,
+                "subject": subject,
+                "timestamp": time_now_iso8601(),
+            }
+        )
         return {
             "success": True,
             "message_id": f"mock-email-{self.call_count}",
@@ -369,6 +374,7 @@ class MockEmailTool:
 # =============================================================================
 # E2E Test Body
 # =============================================================================
+
 
 async def run_area_coverage_test(
     workflow_run_setup,
@@ -412,17 +418,13 @@ async def run_area_coverage_test(
         # After greeting, user asks about village coverage
         MockLLMService.create_function_call_chunks(
             function_name="kb_search_coverage",
-            arguments={
-                "query": "Is Rampur Khas village covered under PM Surya Ghar?"
-            },
+            arguments={"query": "Is Rampur Khas village covered under PM Surya Ghar?"},
             tool_call_id="call_1",
         ),
         # Bot provides coverage info, user requests email
         MockLLMService.create_function_call_chunks(
             function_name="request_email_confirmation",
-            arguments={
-                "email": "teacher.rampur@email.gov.in"
-            },
+            arguments={"email": "teacher.rampur@email.gov.in"},
             tool_call_id="call_2",
         ),
         # Bot confirms email will be sent
@@ -493,9 +495,7 @@ async def run_area_coverage_test(
                 "Is Rampur Khas village in the current list of "
                 "covered areas under PM Surya Ghar?"
             )
-            results["steps_completed"].append(
-                "User asked about village coverage"
-            )
+            results["steps_completed"].append("User asked about village coverage")
 
             # Wait for LLM to process and transition
             await asyncio.sleep(0.5)
@@ -518,12 +518,8 @@ async def run_area_coverage_test(
                     "teacher.rampur@email.gov.in"
                 )
             )
-            conversation_transcripts.append(
-                "Please send me the details via email"
-            )
-            results["steps_completed"].append(
-                "User requested email confirmation"
-            )
+            conversation_transcripts.append("Please send me the details via email")
+            results["steps_completed"].append("User requested email confirmation")
 
             # Wait for run to complete
             await asyncio.wait_for(run_task, timeout=30.0)
@@ -548,10 +544,12 @@ async def run_area_coverage_test(
         )
         assert "End Call" in nodes_visited, "End Call node should have been visited"
 
-        results["steps_completed"].extend([
-            "Workflow completed successfully",
-            f"Nodes visited: {nodes_visited}",
-        ])
+        results["steps_completed"].extend(
+            [
+                "Workflow completed successfully",
+                f"Nodes visited: {nodes_visited}",
+            ]
+        )
 
         # Verify extraction captured the conversation outcomes
         extracted = refreshed.gathered_context
@@ -599,6 +597,7 @@ async def run_area_coverage_test(
 # =============================================================================
 # Test Cases
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_sc_modern_02_area_coverage_verification(
@@ -650,16 +649,14 @@ async def test_sc_modern_02_area_coverage_verification(
     print(f"Success: {results['success']}")
     print(f"Steps Completed: {results['steps_completed']}")
     print(f"Extracted Variables: {results['extracted_variables']}")
-    if results['errors']:
+    if results["errors"]:
         print(f"Errors: {results['errors']}")
-    if results['infrastructure_gaps']:
+    if results["infrastructure_gaps"]:
         print(f"Infrastructure Gaps: {results['infrastructure_gaps']}")
     print("=" * 60)
 
     # Final assertions
-    assert results["success"], (
-        f"Test failed. Errors: {results['errors']}"
-    )
+    assert results["success"], f"Test failed. Errors: {results['errors']}"
     assert "Workflow completed successfully" in results["steps_completed"], (
         "Workflow should have completed"
     )
@@ -674,14 +671,13 @@ async def test_sc_modern_02_area_coverage_verification(
 
     # Document infrastructure gaps
     if results["infrastructure_gaps"]:
-        pytest.skip(
-            f"Test infrastructure not ready: {results['infrastructure_gaps']}"
-        )
+        pytest.skip(f"Test infrastructure not ready: {results['infrastructure_gaps']}")
 
 
 # =============================================================================
 # Additional Test Cases for Edge Scenarios
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_sc_modern_02_handles_covered_village(
@@ -855,9 +851,7 @@ async def test_sc_modern_02_handles_uncovred_village(
 
             # Query about an uncovered village
             await pipeline_task.queue_frame(
-                create_english_transcription(
-                    "Is UnknownVillage in the coverage area?"
-                )
+                create_english_transcription("Is UnknownVillage in the coverage area?")
             )
 
             # Verify KB was called

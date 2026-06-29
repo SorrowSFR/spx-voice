@@ -12,13 +12,13 @@ from loguru import logger
 from api.constants import REDIS_URL
 from api.mcp_server import mcp
 from api.routes.main import router as main_router
-from api.services.pipecat.tracing_config import (
-    handle_langfuse_sync,
-    load_all_org_langfuse_credentials,
-)
 from api.services.livekit.worker_process import (
     apply_livekit_worker_settings,
     stop_livekit_worker,
+)
+from api.services.pipecat.tracing_config import (
+    handle_langfuse_sync,
+    load_all_org_langfuse_credentials,
 )
 from api.services.worker_sync.manager import (
     WorkerSyncManager,

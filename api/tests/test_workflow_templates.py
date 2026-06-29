@@ -21,7 +21,9 @@ def test_templates_have_unique_names_and_descriptions():
         assert template["description"].strip()
 
 
-@pytest.mark.parametrize("template", DEFAULT_WORKFLOW_TEMPLATES, ids=lambda t: t["name"])
+@pytest.mark.parametrize(
+    "template", DEFAULT_WORKFLOW_TEMPLATES, ids=lambda t: t["name"]
+)
 def test_template_definition_is_a_valid_graph(template):
     dto = ReactFlowDTO.model_validate(template["definition"])
     graph = WorkflowGraph(dto)

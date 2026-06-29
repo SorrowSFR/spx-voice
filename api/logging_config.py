@@ -3,6 +3,7 @@ import os
 import sys
 
 import loguru
+
 from api.constants import (
     ENVIRONMENT,
     LOG_COMPRESSION,
