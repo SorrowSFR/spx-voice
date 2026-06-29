@@ -429,10 +429,13 @@ export const useWorkflowState = ({
     const onConnect: OnConnect = useCallback((connection) => {
         if (!rfInstance.current) return;
 
-        // Use addEdges from ReactFlow instance
+        // Use addEdges from ReactFlow instance. The id includes a random suffix
+        // so a second edge between the same pair (e.g. a branch back to a node)
+        // gets a unique id — ReactFlow silently drops edges with duplicate ids,
+        // and CustomEdge is built to render parallel edges between a pair.
         rfInstance.current.addEdges([{
             ...connection,
-            id: `${connection.source}-${connection.target}`,
+            id: `${connection.source}-${connection.target}-${getRandomId()}`,
             data: {
                 label: '',
                 condition: ''

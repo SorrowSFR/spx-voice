@@ -25,6 +25,7 @@ from api.services.worker_sync.manager import (
     set_worker_sync_manager,
 )
 from api.services.worker_sync.protocol import WorkerSyncEventType
+from api.services.workflow.templates import ensure_default_workflow_templates
 from api.tasks.arq import get_arq_redis
 
 API_PREFIX = "/api/v1"
@@ -50,6 +51,13 @@ async def lifespan(app: FastAPI):
         await sync_manager.start()
         set_worker_sync_manager(sync_manager)
         apply_livekit_worker_settings()
+
+        # Seed the built-in starter templates so the "Create Agent" picker is
+        # never empty on a fresh install. Idempotent and best-effort.
+        try:
+            await ensure_default_workflow_templates()
+        except Exception as exc:
+            logger.warning(f"Workflow template seeding skipped: {exc}")
 
         yield  # Run app
 
